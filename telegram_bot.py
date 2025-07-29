@@ -41,6 +41,10 @@ def get_gpt4_recommendation(history):
 # --- 텔레그램 명령어 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
     """/start 명령어 처리: 사용자에게 시작 메시지와 버튼을 보냅니다."""
+    # --- 진단용 코드 추가 ---
+    print(f"'/start' 명령어를 받았습니다. 사용자 ID: {update.message.from_user.id}")
+    # ---------------------
+
     user_id = update.message.from_user.id
     user_histories[user_id] = []  # 사용자 기록 초기화
 
