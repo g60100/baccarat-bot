@@ -61,6 +61,10 @@ async def start(update: Update, context: CallbackContext) -> None:
         reply_markup=reply_markup
     )
 
+# --- 진단용 코드 추가 ---
+    print(f"응답 메시지를 성공적으로 보냈습니다.")
+    # ---------------------
+
 async def button(update: Update, context: CallbackContext) -> None:
     """버튼 클릭 처리"""
     query = update.callback_query
