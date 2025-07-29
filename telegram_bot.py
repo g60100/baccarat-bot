@@ -91,7 +91,8 @@ async def button(update: Update, context: CallbackContext) -> None:
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
     """봇을 시작합니다."""
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    # 봇이 시작되기 전에, 쌓여있는 메시지를 모두 지우도록 설정 추가
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
 
     # 명령어 핸들러 등록
     application.add_handler(CommandHandler("start", start))
@@ -99,7 +100,12 @@ def main() -> None:
 
     # 봇 실행 (메시지를 계속 확인)
     print("텔레그램 봇이 시작되었습니다...")
-    application.run_polling()
+    # drop_pending_updates=True 옵션을 추가하여 오래된 메시지를 무시
+    application.run_polling(drop_pending_updates=True)
+
+async def post_init(application: Application) -> None:
+    """봇 초기화 시 오래된 업데이트를 정리하는 함수"""
+    await application.bot.delete_webhook(drop_pending_updates=True)
 
 if __name__ == "__main__":
     main()
