@@ -21,11 +21,16 @@ user_data = {}
 def create_big_road_image(history):
     cell_size = 22
     rows, cols = 6, 60
-    top_padding = 30
+    
+    # --- 수정된 부분 ---
+    top_padding = 30    # 상단 여백 (제목용)
+    bottom_padding = 30 # 하단 여백 추가 (세로 비율 조절용)
     width = cols * cell_size
-    height = rows * cell_size + top_padding
-
-    img = Image.new('RGB', (width, height), color='#f4f6f9')
+    # 전체 높이를 늘려 이미지 비율 변경
+    height = rows * cell_size + top_padding + bottom_padding 
+    # --- 여기까지 수정 ---
+    
+    img = Image.new('RGB', (width, height), color = '#f4f6f9')
     draw = ImageDraw.Draw(img)
 
     try:
@@ -34,11 +39,13 @@ def create_big_road_image(history):
         font = ImageFont.load_default()
     draw.text((10, 5), "ZENTRA AI - Big Road", fill="black", font=font)
 
+    # 그리드 라인 그리기 (상단 여백만큼 아래로 이동)
     for r in range(rows + 1):
         draw.line([(0, r * cell_size + top_padding), (width, r * cell_size + top_padding)], fill='lightgray')
     for c in range(cols + 1):
-        draw.line([(c * cell_size, top_padding), (c * cell_size, height)], fill='lightgray')
+        draw.line([(c * cell_size, top_padding), (c * cell_size, height - bottom_padding)], fill='lightgray')
 
+    # 기록을 이미지에 그리기
     if history:
         col, row = -1, 0
         last_winner = None
@@ -75,17 +82,6 @@ def create_big_road_image(history):
     image_path = "baccarat_road.png"
     img.save(image_path)
     return image_path
-
-# --- GPT-4 분석 함수 ---
-def get_gpt4_recommendation(history):
-    prompt = f"Baccarat history: {history}. Recommend Player or Banker."
-    try:
-        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
-        rec = completion.choices[0].message.content
-        return "Banker" if "Banker" in rec else "Player"
-    except Exception as e:
-        print(f"GPT-4 API Error: {e}")
-        return "Banker"
 
 # --- 캡션 구성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
