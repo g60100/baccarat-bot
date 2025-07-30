@@ -172,6 +172,7 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
+    await query.answer()
     user_id = query.from_user.id
     
     lock = user_locks[user_id]
@@ -180,8 +181,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         return
 
     async with lock:
-        await query.answer()
-        
         if user_id not in user_data:
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
         
@@ -211,8 +210,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2)
             await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
 
+            # --- 이 부분이 수정되었습니다 ---
+            # AI의 과거 실적 데이터를 불러와 함께 전달합니다.
+            ai_performance_history = load_results()
             history_str = ", ".join(data['history'])
-            recommendation = get_gpt4_recommendation(history_str)
+            recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
+            # --- 여기까지 ---
+
             data['recommendation'] = recommendation
             is_analyzing = False
 
