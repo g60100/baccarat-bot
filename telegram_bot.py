@@ -101,12 +101,39 @@ def create_big_road_image(user_id, history, page=0):
     return image_path
 
 # --- GPT-4 분석 함수 ---
-def get_gpt4_recommendation(history):
-    prompt = f"Baccarat history: {history}. Recommend Player or Banker."
+def get_gpt4_recommendation(game_history, ai_performance_history):
+    performance_text = "아직 나의 추천 기록이 없습니다."
+    if ai_performance_history:
+        performance_text = "아래는 당신(AI)의 과거 추천 기록과 그 실제 결과입니다:\n"
+        for i, record in enumerate(ai_performance_history[-10:]):
+            outcome_text = '승리' if record.get('outcome') == 'win' else '패배'
+            performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
+
+    prompt = f"""
+    당신은 세계 최고의 바카라 데이터 분석가이며, 자신의 과거 판단을 복기하여 전략을 수정하는 능력이 뛰어납니다.
+    주어진 두 가지 데이터를 모두 입체적으로 분석하여 다음 베팅을 추천해야 합니다.
+
+    [데이터 1: 현재 게임의 흐름]
+    'P'는 플레이어 승, 'B'는 뱅커 승리를 의미합니다.
+    {game_history}
+
+    [데이터 2: 당신의 과거 추천 실적]
+    {performance_text}
+
+    이제 [데이터 1]의 게임 흐름과 [데이터 2]의 당신의 실적을 모두 고려하세요. 
+    만약 당신의 추천이 계속 틀리고 있다면, 그 패턴을 깨는 새로운 추천을 해야 합니다.
+    모든 것을 종합하여 다음 라운드에 가장 유리한 베팅(Player 또는 Banker)을 하나만 추천해주세요.
+    """
     try:
-        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
-        rec = completion.choices[0].message.content
-        return "Banker" if "Banker" in rec else "Player"
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "당신은 자신의 과거 실적을 복기하여 전략을 수정하는 세계 최고의 지능적인 바카라 분석가입니다."},
+                {"role": "user", "content": prompt}
+            ]
+        )
+        recommendation = completion.choices[0].message.content
+        return "Banker" if "Banker" in recommendation else "Player"
     except Exception as e:
         print(f"GPT-4 API Error: {e}")
         return "Banker"
