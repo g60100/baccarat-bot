@@ -163,7 +163,7 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 기록록 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 기록 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
