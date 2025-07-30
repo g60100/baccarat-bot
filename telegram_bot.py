@@ -1,4 +1,4 @@
-# telegram_bot.py (Final Corrected Version)
+# telegram_bot.py (Final Version 2)
 
 import os
 import json
@@ -21,7 +21,6 @@ def escape_markdown(text: str) -> str:
     """Telegram Markdown V2의 모든 특수문자를 이스케이프합니다."""
     escape_chars = r'_*[]()~`>#+-.=|{}!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
-# ---------------------------------------------------------
 
 # --- GPT-4 분석 함수 (기존과 동일) ---
 def get_gpt4_recommendation(history):
@@ -40,9 +39,8 @@ def get_gpt4_recommendation(history):
         print(f"GPT-4 API 호출 오류: {e}")
         return "Banker"
 
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
-def build_message_text(user_id):
+# --- 화면(메시지) 구성 함수 (수정됨) ---
+def build_message_text(user_id, is_analyzing=False):
     """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
     data = user_data.get(user_id, {})
     player_wins = data.get('player_wins', 0)
@@ -50,6 +48,7 @@ def build_message_text(user_id):
     history = data.get('history', [])
     recommendation = data.get('recommendation', None)
 
+    # Big Road 기록판 생성 (60열)
     grid = [['▪️'] * 60 for _ in range(6)]
     if history:
         col, row = -1, 0
@@ -82,27 +81,25 @@ def build_message_text(user_id):
 
     big_road_text = "\n".join(["".join(r) for r in grid])
 
-    rec_text = ""
-    if recommendation:
+    # AI 추천 결과 텍스트 (수정됨)
+    rec_text = "\n\n👇 *AI 추천* 👇\n"
+    if is_analyzing:
+        rec_text += escape_markdown("GPT-4가 분석 중입니다...")
+    elif recommendation:
         if recommendation == "Banker":
-            rec_text = f"\n\n👇 *AI 추천* 👇\n🔴 *뱅커에 베팅하세요*"
-        else:
-            rec_text = f"\n\n👇 *AI 추천* 👇\n🔵 *플레이어에 베팅하세요*"
+            rec_text += f"🔴 *{escape_markdown('뱅커에 베팅하세요.')}*"
+        else: # Player
+            rec_text += f"🔵 *{escape_markdown('플레이어에 베팅하세요.')}*"
+    else:
+        rec_text = "" # 분석 전에는 AI 추천 섹션 숨김
 
-    title = "ZENTRA AI 분석"
-    subtitle = "승리한 쪽의 버튼을 눌러 기록을 누적하세요."
-    player_title = "플레이어"
-    banker_title = "뱅커"
-    history_title = "전체 기록 (Big Road)"
+    # 일반 텍스트 부분 이스케이프 처리
+    title = escape_markdown("ZENTRA AI 분석")
+    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title = escape_markdown("플레이어")
+    banker_title = escape_markdown("뱅커")
+    history_title = escape_markdown("전체 기록 (Big Road)")
     
-    special_chars = "_*[]()~`>#+-.=|{}!"
-    for char in special_chars:
-        title = title.replace(char, f"\\{char}")
-        subtitle = subtitle.replace(char, f"\\{char}")
-        player_title = player_title.replace(char, f"\\{char}")
-        banker_title = banker_title.replace(char, f"\\{char}")
-        history_title = history_title.replace(char, f"\\{char}")
-
     return f"""*{title}*
 {subtitle}
 
@@ -150,10 +147,16 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
     elif action == 'analyze':
         if not data['history']:
-            await context.bot.send_message(chat_id=user_id, text=escape_markdown("분석할 기록이 없습니다. 먼저 결과를 기록해주세요."))
+            await context.bot.answer_callback_query(query.id, text="분석할 기록이 없습니다. 먼저 결과를 기록해주세요.")
             return
         
-        await context.bot.send_message(chat_id=user_id, text=escape_markdown("GPT-4가 분석 중입니다..."))
+        # 분석 중 메시지로 화면 업데이트
+        await query.edit_message_text(
+            text=build_message_text(user_id, is_analyzing=True),
+            reply_markup=build_keyboard(),
+            parse_mode=ParseMode.MARKDOWN_V2
+        )
+        
         history_str = ", ".join(data['history'])
         recommendation = get_gpt4_recommendation(history_str)
         data['recommendation'] = recommendation
@@ -176,4 +179,5 @@ def main() -> None:
     application.run_polling(drop_pending_updates=True)
 
 if __name__ == "__main__":
+    main()
     main()
