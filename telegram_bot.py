@@ -106,18 +106,47 @@ def get_gpt4_recommendation(history):
     except Exception as e: return "Banker"
 
 # --- 캡션 및 키보드 생성 함수 (페이지 넘김 버튼 추가) ---
-def build_caption_text(user_id, is_analyzing=False):
-    # ... (생략, 기존 코드와 동일)
-    data = user_data.get(user_id, {})
-    player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
-    recommendation = data.get('recommendation', None)
-    rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
-    title, subtitle = escape_markdown("ZENTRA AI 분석"), escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
-    player_title, banker_title = escape_markdown("플레이어"), escape_markdown("뱅커")
-    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 
+def build_caption_text(user_id, is_analyzing=False):
+    data = user_data.get(user_id, {})
+    player_wins = data.get('player_wins', 0)
+    banker_wins = data.get('banker_wins', 0)
+    recommendation = data.get('recommendation', None)
+    page = data.get('page', 0)
+    history = data.get('history', [])
+
+    # 전체 페이지 수 계산
+    cols_per_page = 20
+    last_col = -1
+    last_winner = None
+    for winner in history:
+        if winner == 'T': continue
+        if winner != last_winner: last_col +=1
+        last_winner = winner
+    total_pages = math.ceil((last_col + 1) / cols_per_page)
+
+    # 페이지 넘김 버튼 텍스트 생성
+    page_text = ""
+    if total_pages > 1:
+        prev_button = "⬅️ 이전" if page > 0 else "➖"
+        next_button = "다음 ➡️" if page < total_pages - 1 else "➖"
+        page_text = f"\n\n*{prev_button}* ( {page + 1} / {total_pages} )     *{next_button}*"
+
+    # AI 추천 결과 텍스트
+    rec_text = ""
+    if is_analyzing:
+        rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation:
+        rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    
+    # 일반 텍스트 부분 이스케이프 처리
+    title = escape_markdown("ZENTRA AI 분석")
+    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title = escape_markdown("플레이어")
+    banker_title = escape_markdown("뱅커")
+    
+    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{page_text}{rec_text}"
 def escape_markdown(text: str) -> str:
     escape_chars = r'_*[]()~`>#+-.=|{}!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
