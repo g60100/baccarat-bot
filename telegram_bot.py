@@ -1,34 +1,30 @@
-# telegram_bot.py 수정
+# telegram_bot.py (New Version)
 
-import os # os 라이브러리 추가
+import os
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Application, CommandHandler, MessageHandler, filters, CallbackContext, CallbackQueryHandler
+from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
+from telegram.constants import ParseMode
 
 # --- 설정 ---
-# 코드에서 직접 키를 읽는 대신, 서버의 환경 변수에서 키를 읽어옴
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 
-# ... (이후 코드는 동일) ...
-
-# 사용자별 게임 기록을 저장할 딕셔너리
-user_histories = {}
+# 사용자별 데이터를 저장할 딕셔너리
+# 이제 승리 횟수, 기록, 추천 결과를 모두 관리합니다.
+user_data = {}
 
 # --- GPT-4 분석 함수 (기존과 동일) ---
 def get_gpt4_recommendation(history):
-    prompt = f"""
-    당신은 세계 최고의 바카라 패턴 분석가입니다. 과거 게임 기록의 순서와 흐름을 보고, 가장 확률 높은 다음 베팅을 추천해야 합니다.
-    플레이어(Player) 또는 뱅커(Banker) 중 하나로만 간결하게 답변해주세요.
-    기록: {history}
-    """
+    # ... (이전과 동일한 GPT-4 호출 로직)
+    prompt = f"Baccarat game history: {history}. 'P' is Player win, 'B' is Banker win. Analyze the pattern and recommend the next bet. Answer with only 'Player' or 'Banker'."
     try:
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "당신은 데이터와 패턴에만 근거하여 분석하는 최고의 바카라 전략가입니다."},
+                {"role": "system", "content": "You are an expert Baccarat pattern analyst."},
                 {"role": "user", "content": prompt}
             ]
         )
@@ -38,82 +34,117 @@ def get_gpt4_recommendation(history):
         print(f"GPT-4 API 호출 오류: {e}")
         return "Banker"
 
-# --- 텔레그램 명령어 처리 함수 ---
+# --- 화면(메시지) 구성 함수 ---
+def build_message_text(user_id):
+    """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
+    data = user_data.get(user_id, {})
+    player_wins = data.get('player_wins', 0)
+    banker_wins = data.get('banker_wins', 0)
+    history = data.get('history', [])
+    recommendation = data.get('recommendation', None)
+
+    # Big Road 기록판 생성 (최대 6행 12열 예시)
+    grid = [['⚪️'] * 12 for _ in range(6)]
+    if history:
+        col, row, last_winner = -1, 0, None
+        for winner in history:
+            if winner == 'T': continue # 타이는 Big Road에 직접 표시하지 않음
+            if winner != last_winner:
+                col += 1
+                row = 0
+            else:
+                row += 1
+            if col < 12 and row < 6:
+                grid[row][col] = '🔵' if winner == 'P' else '🔴'
+            last_winner = winner
+    
+    big_road_text = "\n".join(["".join(row) for row in grid])
+
+    # 추천 결과 텍스트
+    rec_text = ""
+    if recommendation:
+        rec_text = f"\n\n👇 *AI 추천* 👇\n*{recommendation}에 베팅하세요*"
+
+    # 전체 메시지 조합
+    return f"""*ZENTRA AI 분석*
+승리한 쪽의 버튼을 눌러 기록을 누적하세요.
+
+*플레이어: {player_wins}* |  *뱅커: {banker_wins}*
+---
+*전체 기록 (Big Road)*
+`{big_road_text}`{rec_text}
+"""
+
+def build_keyboard():
+    """텔레그램 인라인 키보드를 생성합니다."""
+    return InlineKeyboardMarkup([
+        [InlineKeyboardButton(f"🔵 플레이어(Player) 승리 입력", callback_data='P'), InlineKeyboardButton(f"🔴 뱅커(Banker) 승리 입력", callback_data='B')],
+        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')],
+        [InlineKeyboardButton("🔍 분석 후 베팅 추천", callback_data='analyze'), InlineKeyboardButton("🔄 초기화", callback_data='reset')]
+    ])
+
+# --- 텔레그램 명령어 및 버튼 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
-    """/start 명령어 처리: 사용자에게 시작 메시지와 버튼을 보냅니다."""
-    # --- 진단용 코드 추가 ---
-    print(f"'/start' 명령어를 받았습니다. 사용자 ID: {update.message.from_user.id}")
-    # ---------------------
-
+    """/start 명령어: 봇을 초기화하고 첫 화면을 보냅니다."""
     user_id = update.message.from_user.id
-    user_histories[user_id] = []  # 사용자 기록 초기화
-
-    keyboard = [
-        [InlineKeyboardButton("🔵 플레이어 승리", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이", callback_data='T')],
-        [InlineKeyboardButton("🔍 분석 실행", callback_data='analyze'), InlineKeyboardButton("🔄 초기화", callback_data='reset')]
-    ]
-    reply_markup = InlineKeyboardMarkup(keyboard)
+    user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
     
     await update.message.reply_text(
-        "바카라 분석을 시작합니다.\n"
-        "아래 버튼을 눌러 게임 결과를 기록하고 '분석 실행'을 누르세요.",
-        reply_markup=reply_markup
+        build_message_text(user_id),
+        reply_markup=build_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
     )
 
-# --- 진단용 코드 추가 ---
-    print(f"응답 메시지를 성공적으로 보냈습니다.")
-    # ---------------------
-
-async def button(update: Update, context: CallbackContext) -> None:
-    """버튼 클릭 처리"""
+async def button_callback(update: Update, context: CallbackContext) -> None:
+    """모든 버튼 클릭을 처리합니다."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
-
-    # 사용자 기록 초기화
-    if user_id not in user_histories:
-        user_histories[user_id] = []
-
-    # 버튼 데이터에 따라 기능 수행
-    if query.data in ['P', 'B', 'T']:
-        user_histories[user_id].append(query.data)
-        history_str = ", ".join(user_histories[user_id])
-        await query.edit_message_text(text=f"기록됨: {query.data}\n현재 기록: {history_str if history_str else '없음'}", reply_markup=query.message.reply_markup)
     
-    elif query.data == 'reset':
-        user_histories[user_id] = []
-        await query.edit_message_text(text="기록이 초기화되었습니다. 다시 시작하세요.", reply_markup=query.message.reply_markup)
+    # 사용자 데이터 초기화
+    if user_id not in user_data:
+        user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
+    
+    action = query.data
+    data = user_data[user_id]
 
-    elif query.data == 'analyze':
-        history = user_histories.get(user_id, [])
-        if not history:
+    if action == 'P':
+        data['player_wins'] += 1
+        data['history'].append('P')
+        data['recommendation'] = None # 추천 결과 초기화
+    elif action == 'B':
+        data['banker_wins'] += 1
+        data['history'].append('B')
+        data['recommendation'] = None # 추천 결과 초기화
+    elif action == 'T':
+        data['history'].append('T')
+        data['recommendation'] = None # 추천 결과 초기화
+    elif action == 'reset':
+        user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
+    elif action == 'analyze':
+        if not data['history']:
             await context.bot.send_message(chat_id=user_id, text="분석할 기록이 없습니다. 먼저 결과를 기록해주세요.")
             return
-
+        
         await context.bot.send_message(chat_id=user_id, text="GPT-4가 분석 중입니다...")
-        history_str = ", ".join(history)
+        history_str = ", ".join(data['history'])
         recommendation = get_gpt4_recommendation(history_str)
-        await context.bot.send_message(chat_id=user_id, text=f"🤖 AI 추천: **{recommendation}**에 베팅하세요.")
+        data['recommendation'] = recommendation
+
+    # 메시지 수정으로 화면 업데이트
+    await query.edit_message_text(
+        text=build_message_text(user_id),
+        reply_markup=build_keyboard(),
+        parse_mode=ParseMode.MARKDOWN
+    )
 
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
-    """봇을 시작합니다."""
-    # 봇이 시작되기 전에, 쌓여있는 메시지를 모두 지우도록 설정 추가
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).post_init(post_init).build()
-
-    # 명령어 핸들러 등록
+    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button))
-
-    # 봇 실행 (메시지를 계속 확인)
+    application.add_handler(CallbackQueryHandler(button_callback))
     print("텔레그램 봇이 시작되었습니다...")
-    # drop_pending_updates=True 옵션을 추가하여 오래된 메시지를 무시
-    application.run_polling(drop_pending_updates=True)
-
-async def post_init(application: Application) -> None:
-    """봇 초기화 시 오래된 업데이트를 정리하는 함수"""
-    await application.bot.delete_webhook(drop_pending_updates=True)
+    application.run_polling()
 
 if __name__ == "__main__":
     main()
