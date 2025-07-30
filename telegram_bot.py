@@ -15,21 +15,36 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 
-# --- 이미지 생성 함수 ---
+# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+
 def create_big_road_image(history):
     cell_size = 22
     rows, cols = 6, 60
+    
+    # --- 이 부분이 수정되었습니다 ---
+    top_padding = 30  # 이미지 상단에 여백 추가
     width = cols * cell_size
-    height = rows * cell_size
+    height = rows * cell_size + top_padding # 전체 높이를 늘림
     
     img = Image.new('RGB', (width, height), color = '#f4f6f9')
     draw = ImageDraw.Draw(img)
 
+    # 상단에 "ZENTRA AI - Big Road" 텍스트 추가
+    try:
+        # 폰트는 서버 환경에 따라 다를 수 있어, 없을 경우를 대비
+        font = ImageFont.truetype("arial.ttf", 16)
+    except IOError:
+        font = ImageFont.load_default()
+    draw.text((10, 5), "ZENTRA AI - Big Road", fill="black", font=font)
+    
+    # 그리드 라인 그리기 (상단 여백만큼 아래로 이동)
     for r in range(rows + 1):
-        draw.line([(0, r * cell_size), (width, r * cell_size)], fill='lightgray')
+        draw.line([(0, r * cell_size + top_padding), (width, r * cell_size + top_padding)], fill='lightgray')
     for c in range(cols + 1):
-        draw.line([(c * cell_size, 0), (c * cell_size, height)], fill='lightgray')
+        draw.line([(c * cell_size, top_padding), (c * cell_size, height)], fill='lightgray')
+    # --- 여기까지 수정 ---
 
+    # 기록을 이미지에 그리기
     if history:
         col, row = -1, 0
         last_winner = None
@@ -39,7 +54,8 @@ def create_big_road_image(history):
             if winner == 'T':
                 if last_bead_pos:
                     r, c = last_bead_pos
-                    draw.line([(c * cell_size + 5, r * cell_size + 5), ((c+1) * cell_size - 5, (r+1) * cell_size - 5)], fill='#2ecc71', width=2)
+                    # y 좌표에 top_padding 추가
+                    draw.line([(c * cell_size + 5, r * cell_size + 5 + top_padding), ((c+1) * cell_size - 5, (r+1) * cell_size - 5 + top_padding)], fill='#2ecc71', width=2)
                 continue
 
             if winner != last_winner:
@@ -54,7 +70,8 @@ def create_big_road_image(history):
 
             if col < cols:
                 color = "#3498db" if winner == 'P' else "#e74c3c"
-                draw.ellipse([(col * cell_size + 3, row * cell_size + 3), ((col+1) * cell_size - 3, (r+1) * cell_size - 3)], outline=color, width=3)
+                # y 좌표에 top_padding 추가
+                draw.ellipse([(col * cell_size + 3, row * cell_size + 3 + top_padding), ((col+1) * cell_size - 3, (r+1) * cell_size - 3 + top_padding)], outline=color, width=3)
                 last_bead_pos = (row, col)
             
             last_winner = winner
