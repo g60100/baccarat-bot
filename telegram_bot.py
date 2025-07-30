@@ -20,7 +20,7 @@ user_data = {}
 
 def create_big_road_image(history):
     cell_size = 22
-    rows, cols = 6, 60
+    rows, cols = 6, 30
     
     # --- 수정된 부분 ---
     top_padding = 30    # 상단 여백 (제목용)
