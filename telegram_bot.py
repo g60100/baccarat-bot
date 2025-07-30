@@ -146,14 +146,14 @@ def build_caption_text(user_id, is_analyzing=False):
     
     rec_text = ""
     if is_analyzing:
-        rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+        rec_text = f"\n\n👇 *GPT-4 베팅 AI 추천* 👇\n_{escape_markdown('GPT-4 AI가 분석 중 입니다...')}_"
     elif recommendation:
-        rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+        rec_text = f"\n\n👇 *GPT-4 베팅 AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA AI 분석")
-    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
-    player_title = escape_markdown("플레이어")
-    banker_title = escape_markdown("뱅커")
+    title = escape_markdown("나는 ZENTRA AI 분석기입니다. 나는 100% 승산을 보장하지 못하며, 당신의 경험과 AI 분석을 참조해서 신중하게 결정하세요")
+    subtitle = escape_markdown("실제 승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title = escape_markdown("플레이어 승 횟수")
+    banker_title = escape_markdown("뱅커 승 횟수")
     
     return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
@@ -179,12 +179,12 @@ def build_keyboard(user_id):
     if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     keyboard = [
-        [InlineKeyboardButton("🔵 플레이어 승리", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
+        [InlineKeyboardButton("🟢 타이(Tie) 기록", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천", callback_data='analyze'), InlineKeyboardButton("🔄 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
         
     return InlineKeyboardMarkup(keyboard)
 
