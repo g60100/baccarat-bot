@@ -40,8 +40,6 @@ def get_gpt4_recommendation(history):
         print(f"GPT-4 API 호출 오류: {e}")
         return "Banker"
 
-# --- 화면(메시지) 구성 함수 (이스케이프 기능 적용) ---
-
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 
 def build_message_text(user_id):
@@ -52,30 +50,8 @@ def build_message_text(user_id):
     history = data.get('history', [])
     recommendation = data.get('recommendation', None)
 
-    # 1. Big Road를 60개로 확장
     grid = [['▪️'] * 60 for _ in range(6)]
     if history:
-        col, row = -1, 0
-        last_winner = None
-        last_bead_pos = None
-
-        for winner in history:
-            if winner == 'T':# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
-def bu# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
-def build_message_text(user_id):
-    """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
-    data = user_data.get(user_id, {})
-    player_wins = data.get('player_wins', 0)
-    banker_wins = data.get('banker_wins', 0)
-    history = data.get('history', [])
-    recommendation = data.get('recommendation', None)
-
-    # Big Road 기록판 생성 (60열)
-    grid = [['▪️'] * 60 for _ in range(6)]
-    # --- 이 부분이 오류의 원인 ---
-    if history: # if 문장 다음, 아래 내용이 들여쓰기와 함께 모두 포함되어야 합니다.
         col, row = -1, 0
         last_winner = None
         last_bead_pos = None
@@ -103,19 +79,16 @@ def build_message_text(user_id):
                 last_bead_pos = (row, col)
             
             last_winner = winner
-    # --- 여기까지 ---
 
     big_road_text = "\n".join(["".join(r) for r in grid])
 
-    # AI 추천 결과 텍스트
     rec_text = ""
     if recommendation:
         if recommendation == "Banker":
             rec_text = f"\n\n👇 *AI 추천* 👇\n🔴 *뱅커에 베팅하세요*"
-        else: # Player
+        else:
             rec_text = f"\n\n👇 *AI 추천* 👇\n🔵 *플레이어에 베팅하세요*"
 
-    # 일반 텍스트 부분 이스케이프 처리
     title = "ZENTRA AI 분석"
     subtitle = "승리한 쪽의 버튼을 눌러 기록을 누적하세요."
     player_title = "플레이어"
