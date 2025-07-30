@@ -16,7 +16,6 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 
 def create_big_road_image(history):
     cell_size = 22
@@ -82,6 +81,17 @@ def create_big_road_image(history):
     image_path = "baccarat_road.png"
     img.save(image_path)
     return image_path
+
+# --- GPT-4 분석 함수 ---
+def get_gpt4_recommendation(history):
+    prompt = f"Baccarat history: {history}. Recommend Player or Banker."
+    try:
+        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "user", "content": prompt}])
+        rec = completion.choices[0].message.content
+        return "Banker" if "Banker" in rec else "Player"
+    except Exception as e:
+        print(f"GPT-4 API Error: {e}")
+        return "Banker"
 
 # --- 캡션 구성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
