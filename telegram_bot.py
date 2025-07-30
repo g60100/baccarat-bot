@@ -17,6 +17,7 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
+user_locks = defaultdict(asyncio.Lock)
 def load_results():
     try:
         with open(RESULTS_LOG_FILE, 'r') as f: return json.load(f)
