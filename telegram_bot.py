@@ -41,6 +41,7 @@ def get_gpt4_recommendation(history):
         return "Banker"
 
 # --- 화면(메시지) 구성 함수 (이스케이프 기능 적용) ---
+
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 
 def build_message_text(user_id):
@@ -61,6 +62,8 @@ def build_message_text(user_id):
         for winner in history:
             if winner == 'T':# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 
+def bu# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+
 def build_message_text(user_id):
     """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
     data = user_data.get(user_id, {})
@@ -71,7 +74,8 @@ def build_message_text(user_id):
 
     # Big Road 기록판 생성 (60열)
     grid = [['▪️'] * 60 for _ in range(6)]
-    if history:
+    # --- 이 부분이 오류의 원인 ---
+    if history: # if 문장 다음, 아래 내용이 들여쓰기와 함께 모두 포함되어야 합니다.
         col, row = -1, 0
         last_winner = None
         last_bead_pos = None
@@ -84,15 +88,12 @@ def build_message_text(user_id):
                     elif grid[r][c] == '🔵': grid[r][c] = '㊗️'
                 continue
 
-            # 이전 승자와 현재 승자가 다를 경우, 새로운 열 시작
             if winner != last_winner:
                 col += 1
                 row = 0
-            # 이전 승자와 현재 승자가 같을 경우, 아래로 이동
             else:
                 row += 1
             
-            # 6행을 넘어가면 옆으로 꺾이는 '드래곤 테일'
             if row >= 6:
                 col += 1
                 row = 5
@@ -102,6 +103,7 @@ def build_message_text(user_id):
                 last_bead_pos = (row, col)
             
             last_winner = winner
+    # --- 여기까지 ---
 
     big_road_text = "\n".join(["".join(r) for r in grid])
 
