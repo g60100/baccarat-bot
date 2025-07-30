@@ -137,8 +137,8 @@ def build_caption_text(user_id, is_analyzing=False):
     recommendation = data.get('recommendation', None)
     
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommen록 (Tie)", callback_data='T')]
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommen록 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
