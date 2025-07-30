@@ -1,6 +1,7 @@
-# telegram_bot.py (Final Version)
+# telegram_bot.py (Final Corrected Version)
 
 import os
+import json
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
@@ -14,6 +15,13 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 
 # 사용자별 데이터를 저장할 딕셔너리
 user_data = {}
+
+# --- [새로운 기능] Markdown V2 특수문자 이스케이프 함수 ---
+def escape_markdown(text: str) -> str:
+    """Telegram Markdown V2의 모든 특수문자를 이스케이프합니다."""
+    escape_chars = r'_*[]()~`>#+-.=|{}!'
+    return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
+# ---------------------------------------------------------
 
 # --- GPT-4 분석 함수 (기존과 동일) ---
 def get_gpt4_recommendation(history):
@@ -32,7 +40,7 @@ def get_gpt4_recommendation(history):
         print(f"GPT-4 API 호출 오류: {e}")
         return "Banker"
 
-# --- 화면(메시지) 구성 함수 ---
+# --- 화면(메시지) 구성 함수 (이스케이프 기능 적용) ---
 def build_message_text(user_id):
     """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
     data = user_data.get(user_id, {})
@@ -41,50 +49,66 @@ def build_message_text(user_id):
     history = data.get('history', [])
     recommendation = data.get('recommendation', None)
 
-    # 1. Big Road를 60개로 확장
-    grid = [['▪️'] * 60 for _ in range(6)] # 빈 칸 모양 변경
+    # Big Road 기록판 생성 (60열)
+    grid = [['▪️'] * 60 for _ in range(6)]
     if history:
         col, row, last_winner_pos = -1, 0, None
-        for winner in history:
+        last_pb_index = -1
+        # 마지막 P/B 위치를 찾기 위해 history 인덱스 추적
+        for i, winner in enumerate(history):
+            if winner in ['P', 'B']:
+                last_pb_index = i
+        
+        for i, winner in enumerate(history):
             if winner == 'T':
-                # 2. 타이(Tie) 표시 로직 수정
                 if last_winner_pos:
                     r, c = last_winner_pos
-                    if grid[r][c] == '🔴': grid[r][c] = '㊙️' # 뱅커+타이
-                    elif grid[r][c] == '🔵': grid[r][c] = '㊗️' # 플레이어+타이
-                continue # 타이는 위치를 변경하지 않음
+                    if grid[r][c] == '🔴': grid[r][c] = '㊙️'
+                    elif grid[r][c] == '🔵': grid[r][c] = '㊗️'
+                continue
 
-            if winner != history[last_winner_pos['history_index']] if last_winner_pos else None:
+            # 승자 변경 로직 수정
+            prev_winner = history[last_pb_index] if last_pb_index != -1 and i > 0 else None
+            
+            if winner != prev_winner or i == 0 or history[i-1] == 'T':
+                 # 첫번째이거나, 이전 승자가 타이였거나, 이전 P/B와 다를 때
                 col += 1
                 row = 0
             else:
                 row += 1
             
-            if row >= 6: # 드래곤 테일 (옆으로 꺾임)
+            if row >= 6:
                 col += 1
                 row = 5
 
             if col < 60 and row < 6:
                 grid[row][col] = '🔵' if winner == 'P' else '🔴'
-                last_winner_pos = {'row': row, 'col': col, 'history_index': len(history) - 1}
+                last_winner_pos = {'row': row, 'col': col}
+                last_pb_index = i
 
-    big_road_text = "\n".join(["".join(row) for row in grid])
+    big_road_text = "\n".join(["".join(r) for r in grid])
 
-    # 4. AI 추천 결과 색상(이모지) 표시
+    # AI 추천 결과 텍스트
     rec_text = ""
     if recommendation:
         if recommendation == "Banker":
-            rec_text = f"\n\n👇 *AI 추천* 👇\n🔴 *뱅커에 베팅하세요*"
+            rec_text = f"\n\n👇 *AI 추천* 👇\n🔴 *{escape_markdown('뱅커에 베팅하세요.')}*"
         else: # Player
-            rec_text = f"\n\n👇 *AI 추천* 👇\n🔵 *플레이어에 베팅하세요*"
+            rec_text = f"\n\n👇 *AI 추천* 👇\n🔵 *{escape_markdown('플레이어에 베팅하세요.')}*"
 
-    # 전체 메시지 조합
-    return f"""*ZENTRA AI 분석*
-승리한 쪽의 버튼을 눌러 기록을 누적하세요.
+    # [수정] 일반 텍스트 부분에 escape_markdown 함수 적용
+    title = escape_markdown("ZENTRA AI 분석")
+    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title = escape_markdown("플레이어")
+    banker_title = escape_markdown("뱅커")
+    history_title = escape_markdown("전체 기록 (Big Road)")
+    
+    return f"""*{title}*
+{subtitle}
 
-*플레이어: {player_wins}* ┃ *뱅커: {banker_wins}*
----
-*전체 기록 (Big Road)*
+*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*
+\-\-\-
+*{history_title}*
 `{big_road_text}`{rec_text}
 """
 
@@ -98,10 +122,8 @@ def build_keyboard():
 
 # --- 텔레그램 명령어 및 버튼 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
-    """/start 명령어: 봇을 초기화하고 첫 화면을 보냅니다."""
     user_id = update.message.from_user.id
     user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
-    
     await update.message.reply_text(
         build_message_text(user_id),
         reply_markup=build_keyboard(),
@@ -109,7 +131,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     )
 
 async def button_callback(update: Update, context: CallbackContext) -> None:
-    """모든 버튼 클릭을 처리합니다."""
     query = update.callback_query
     await query.answer()
     user_id = query.from_user.id
@@ -129,10 +150,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None}
     elif action == 'analyze':
         if not data['history']:
-            await context.bot.send_message(chat_id=user_id, text="분석할 기록이 없습니다. 먼저 결과를 기록해주세요.")
+            await context.bot.send_message(chat_id=user_id, text=escape_markdown("분석할 기록이 없습니다. 먼저 결과를 기록해주세요."))
             return
         
-        await context.bot.send_message(chat_id=user_id, text="GPT-4가 분석 중입니다...")
+        await context.bot.send_message(chat_id=user_id, text=escape_markdown("GPT-4가 분석 중입니다..."))
         history_str = ", ".join(data['history'])
         recommendation = get_gpt4_recommendation(history_str)
         data['recommendation'] = recommendation
@@ -144,9 +165,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             parse_mode=ParseMode.MARKDOWN_V2
         )
     except Exception as e:
-        print(f"메시지 수정 오류: {e}") # 오류 발생 시 로그 출력
+        print(f"메시지 수정 오류: {e}")
 
-# --- 봇 실행 메인 함수 ---
+# --- 봇 실행 메인 함수 (기존과 동일) ---
 def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
