@@ -1,4 +1,4 @@
-# telegram_bot.py (Final Version with All Fixes)
+# telegram_bot.py (Final Bugfix Version)
 
 import os
 import json
@@ -19,12 +19,11 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 user_locks = defaultdict(asyncio.Lock)
 
-# --- 이미지 생성 함수 ---
-def create_big_road_image(history, page=0):
+# --- [버그 수정] 이미지 생성 함수 ---
+def create_big_road_image(user_id, history, page=0):
     cell_size = 22
     rows, cols_per_page = 6, 20
     
-    # 전체 논리적 그리드 생성
     full_grid_cols = 60
     full_grid = [[''] * full_grid_cols for _ in range(rows)]
     last_positions = {}
@@ -34,7 +33,6 @@ def create_big_road_image(history, page=0):
         last_winner = None
         for i, winner in enumerate(history):
             if winner == 'T':
-                # Use the character representation for tie
                 if last_winner and last_winner in last_positions:
                     r, c = last_positions[last_winner]
                     if full_grid[r][c]:
@@ -73,9 +71,12 @@ def create_big_road_image(history, page=0):
     except IOError:
         font = ImageFont.load_default()
     
-    total_cols = max(col + 1, 1) if 'col' in locals() and 'col' in locals() else 1
-    total_pages = math.ceil(total_cols / cols_per_page)
-    draw.text((10, 5), f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})", fill="black", font=font)
+    total_cols_needed = max(col + 1, 1) if 'col' in locals() else 1
+    total_pages = math.ceil(total_cols_needed / cols_per_page)
+    # user_id를 사용하도록 수정
+    current_page = user_data.get(user_id, {}).get('page', 0)
+    
+    draw.text((10, 5), f"ZENTRA AI - Big Road (Page {current_page + 1} / {total_pages})", fill="black", font=font)
     
     for r in range(rows):
         for c in range(cols_per_page):
@@ -109,10 +110,9 @@ def get_gpt4_recommendation(history):
 # --- 캡션 및 키보드 생성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
     data = user_data.get(user_id, {})
-    player_wins = data.get('player_wins', 0)
-    banker_wins = data.get('banker_wins', 0)
+    player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
-
+    
     rec_text = ""
     if is_analyzing:
         rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
@@ -161,7 +161,8 @@ def build_keyboard(user_id):
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-    image_path = create_big_road_image([], page=0)
+    # user_id를 전달하도록 수정
+    image_path = create_big_road_image(user_id, [], page=0)
     await update.message.reply_photo(
         photo=open(image_path, 'rb'),
         caption=build_caption_text(user_id),
@@ -206,7 +207,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 return
             
             is_analyzing = True
-            image_path = create_big_road_image(data['history'], page=data.get('page', 0))
+            image_path = create_big_road_image(user_id, data['history'], page=data.get('page', 0))
             media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2)
             await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
 
@@ -216,7 +217,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             is_analyzing = False
 
         try:
-            image_path = create_big_road_image(data['history'], page=data.get('page', 0))
+            image_path = create_big_road_image(user_id, data['history'], page=data.get('page', 0))
             media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
             await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
         except Exception as e:
