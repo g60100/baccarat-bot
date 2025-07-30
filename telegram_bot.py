@@ -17,7 +17,10 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
-user_locks = defaultdict(asyncio.Lock)
+def load_results():
+    try:
+        with open(RESULTS_LOG_FILE, 'r') as f: return json.load(f)
+    except: return []
 
 # --- [버그 수정] 이미지 생성 함수 ---
 def create_big_road_image(user_id, history, page=0):
