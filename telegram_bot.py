@@ -1,4 +1,4 @@
-# telegram_bot.py (Final Enhanced Version 2)
+# telegram_bot.py (Final Complete Version)
 
 import os
 import json
@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 # --- 설정 ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-RESULTS_LOG_FILE = 'results_log.json'
+RESULTS_LOG_FILE = 'results_log.json' 
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -37,7 +37,7 @@ def get_feedback_stats():
         elif record.get('outcome') == 'loss': stats['loss'] += 1
     return stats
 
-# --- GPT-4 분석 함수 (더욱 정교한 프롬프트) ---
+# --- GPT-4 분석 함수 ---
 def get_gpt4_recommendation(game_history, ai_performance_history):
     performance_text = "아직 나의 추천 기록이 없습니다."
     if ai_performance_history:
@@ -69,8 +69,9 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
         print(f"GPT-4 API Error: {e}")
         return "Banker"
 
-# --- 이미지/캡션/키보드 생성 함수 (UI 개선) ---
-def create_big_road_image(user_id, history, page=0):
+# --- 이미지/캡션/키보드 생성 함수 ---
+def create_big_road_image(user_id, history):
+    page = user_data.get(user_id, {}).get('page', 0)
     data = user_data.get(user_id, {})
     correct_indices = data.get('correct_indices', [])
     
@@ -79,8 +80,7 @@ def create_big_road_image(user_id, history, page=0):
     full_grid = [[''] * full_grid_cols for _ in range(rows)]
     last_positions = {}
     
-    pb_history_index = -1 # P/B 기록의 인덱스만 카운트
-
+    pb_history_index = -1 
     if history:
         col, row, last_winner = -1, 0, None
         for i, winner in enumerate(history):
@@ -89,14 +89,11 @@ def create_big_road_image(user_id, history, page=0):
                     r, c = last_positions[last_winner]
                     if full_grid[r][c]: full_grid[r][c] += 'T'
                 continue
-
-            pb_history_index += 1 # P 또는 B가 나올 때만 인덱스 증가
-            
+            pb_history_index += 1
             if winner != last_winner: col += 1; row = 0
             else: row += 1
             if row >= rows: col += 1; row = rows - 1
             if col < full_grid_cols: 
-                # 추천 적중 정보를 함께 저장
                 is_correct = 'C' if pb_history_index in correct_indices else ''
                 full_grid[row][col] = winner + is_correct
                 last_positions[winner] = (row, col)
@@ -124,16 +121,58 @@ def create_big_road_image(user_id, history, page=0):
                 winner_char = cell_data[0]
                 is_correct_prediction = 'C' in cell_data
                 color = "#3498db" if winner_char == 'P' else "#e74c3c"
-                
-                # 추천 적중 시 내부를 채움
                 if is_correct_prediction:
                     draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], fill=color, outline=color, width=3)
                 else:
                     draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=3)
-                
                 if 'T' in cell_data: draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill='#2ecc71', width=2)
     
-    ima수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+    image_path = "baccarat_road.png"; img.save(image_path)
+    return image_path
+
+def build_caption_text(user_id, is_analyzing=False):
+    data = user_data.get(user_id, {})
+    player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
+    recommendation = data.get('recommendation', None)
+    
+    rec_text = ""
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅을 참조조하세요.')}*"
+    
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조 하세요. 결정은 본인 책임"); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
+    
+    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+
+def build_keyboard(user_id):
+    data = user_data.get(user_id, {})
+    page = data.get('page', 0)
+    history = data.get('history', [])
+    cols_per_page = 20
+    last_col = -1; last_winner = None
+    for winner in history:
+        if winner == 'T': continue
+        if winner != last_winner: last_col +=1
+        last_winner = winner
+    total_pages = math.ceil((last_col + 1) / cols_per_page) if cols_per_page > 0 else 0
+    
+    page_buttons = []
+    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+
+    keyboard = [
+        [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
+        [InlineKeyboardButton("🟢 타이 기록 (Tie)", callback_data='T')]
+    ]
+    if page_buttons:
+        keyboard.append(page_buttons)
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 참조", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    
+    if data.get('recommendation'):
+        feedback_stats = get_feedback_stats()
+        keyboard.append([
+            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -187,9 +226,11 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 
                 if outcome == 'win' and 'recommendation_info' in data:
                     rec_info = data['recommendation_info']
-                    last_winner = [h for h in data['history'] if h != 'T'][-1]
-                    # 추천한 라운드와 현재 라운드가 일치하고, 결과도 일치하면 적중으로 기록
-                    if rec_info['bet_on'] == last_winner and rec_info['at_round'] == len([h for h in data['history'] if h != 'T']):
+                    
+                    pb_history = [h for h in data['history'] if h != 'T']
+                    last_winner = pb_history[-1]
+                    
+                    if rec_info['bet_on'] == last_winner and rec_info['at_round'] == len(pb_history):
                          data.setdefault('correct_indices', []).append(rec_info['at_round'] - 1)
 
                 await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
