@@ -161,4 +161,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 def main() -> None:
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
-    application.add_handler(
+    application.add_handler(CallbackQueryHandler(button_callback))
+    print("텔레그램 봇이 시작되었습니다...")
+    application.run_polling(drop_pending_updates=True)
+
+if __name__ == "__main__":
+    main()
