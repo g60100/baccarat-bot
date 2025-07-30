@@ -16,6 +16,8 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+
 def create_big_road_image(history):
     cell_size = 22
     rows, cols = 6, 60
@@ -38,36 +40,38 @@ def create_big_road_image(history):
         draw.line([(c * cell_size, top_padding), (c * cell_size, height)], fill='lightgray')
 
     if history:
-        col, row_in_col = -1, 0
+        col, row = -1, 0
         last_winner = None
+        last_bead_pos = None
 
         for winner in history:
             if winner == 'T':
-                if last_winner is not None:
-                    r_last, c_last = last_winner
-                    draw.line([(c_last * cell_size + 5, r_last * cell_size + 5 + top_padding), ((c_last + 1) * cell_size - 5, (r_last + 1) * cell_size - 5 + top_padding)], fill='#2ecc71', width=2)
+                if last_bead_pos:
+                    r_pos, c_pos = last_bead_pos
+                    draw.line([(c_pos * cell_size + 5, r_pos * cell_size + 5 + top_padding), ((c_pos + 1) * cell_size - 5, (r_pos + 1) * cell_size - 5 + top_padding)], fill='#2ecc71', width=2)
                 continue
 
             if winner != last_winner:
                 col += 1
-                row_in_col = 0
+                row = 0
             else:
-                row_in_col += 1
-
-            if row_in_col >= rows:
+                row += 1
+            
+            if row >= rows:
                 col += 1
-                row_in_col = rows - 1
+                row = rows - 1
 
             if col < cols:
                 color = "#3498db" if winner == 'P' else "#e74c3c"
                 x1 = col * cell_size + 3
-                y1 = row_in_col * cell_size + 3 + top_padding
+                y1 = row * cell_size + 3 + top_padding
                 x2 = (col + 1) * cell_size - 3
-                y2 = (row_in_col + 1) * cell_size - 3 + top_padding
+                y2 = (row + 1) * cell_size - 3 + top_padding
                 draw.ellipse([(x1, y1), (x2, y2)], outline=color, width=3)
-                last_winner = (row_in_col, col)
-
-
+                last_bead_pos = (row, col)
+            
+            last_winner = winner
+    
     image_path = "baccarat_road.png"
     img.save(image_path)
     return image_path
@@ -168,9 +172,19 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
+    """봇을 시작합니다."""
+    # 통신 시간 제한을 늘리는 설정 추가
+    application = (
+        Application.builder()
+        .token(TELEGRAM_BOT_TOKEN)
+        .connect_timeout(30)
+        .read_timeout(30)
+        .build()
+    )
+
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
+
     print("텔레그램 봇이 시작되었습니다...")
     application.run_polling(drop_pending_updates=True)
 
