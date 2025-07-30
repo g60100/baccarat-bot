@@ -1,4 +1,4 @@
-# telegram_bot.py (Final Merged Version)
+# telegram_bot.py (Final Corrected Version)
 
 import os
 import json
@@ -14,7 +14,7 @@ from PIL import Image, ImageDraw, ImageFont
 # --- 설정 ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-RESULTS_LOG_FILE = 'results_log.json'
+RESULTS_LOG_FILE = 'results_log.json' 
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -76,7 +76,7 @@ def create_big_road_image(user_id):
     page = data.get('page', 0)
     correct_indices = data.get('correct_indices', [])
     
-    cell_size = 22; rows, cols_per_page = 30, 30
+    cell_size = 22; rows, cols_per_page = 6, 30
     full_grid_cols = 120
     full_grid = [[''] * full_grid_cols for _ in range(rows)]
     last_positions = {}
@@ -109,7 +109,7 @@ def create_big_road_image(user_id):
     except IOError: font = ImageFont.load_default()
     
     total_cols_needed = max(col + 1, 1) if 'col' in locals() else 1
-    total_pages = math.ceil(total_cols_needed / cols_per_page)
+    total_pages = math.ceil(total_cols_needed / cols_per_page) if cols_per_page > 0 else 1
     draw.text((10, 5), f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})", fill="black", font=font)
     
     for r in range(rows):
@@ -137,8 +137,33 @@ def build_caption_text(user_id, is_analyzing=False):
     recommendation = data.get('recommendation', None)
     
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommen록 (Tie)", callback_data='T')]
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅에 참조하세요.')}*"
+    
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
+    
+    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+
+def build_keyboard(user_id):
+    data = user_data.get(user_id, {})
+    page = data.get('page', 0)
+    history = data.get('history', [])
+    cols_per_page = 30
+    last_col = -1; last_winner = None
+    for winner in history:
+        if winner == 'T': continue
+        if winner != last_winner: last_col +=1
+        last_winner = winner
+    total_pages = math.ceil((last_col + 1) / cols_per_page) if cols_per_page > 0 else 0
+    
+    page_buttons = []
+    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+
+    keyboard = [
+        [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
+        [InlineKeyboardButton("🟢 타이 기록록 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
