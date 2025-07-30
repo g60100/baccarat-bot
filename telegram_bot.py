@@ -59,6 +59,24 @@ def build_message_text(user_id):
         last_bead_pos = None
 
         for winner in history:
+            if winner == 'T':# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+
+def build_message_text(user_id):
+    """현재 상태를 기반으로 텔레그램 메시지 전체 내용을 생성합니다."""
+    data = user_data.get(user_id, {})
+    player_wins = data.get('player_wins', 0)
+    banker_wins = data.get('banker_wins', 0)
+    history = data.get('history', [])
+    recommendation = data.get('recommendation', None)
+
+    # Big Road 기록판 생성 (60열)
+    grid = [['▪️'] * 60 for _ in range(6)]
+    if history:
+        col, row = -1, 0
+        last_winner = None
+        last_bead_pos = None
+
+        for winner in history:
             if winner == 'T':
                 if last_bead_pos:
                     r, c = last_bead_pos
@@ -66,12 +84,15 @@ def build_message_text(user_id):
                     elif grid[r][c] == '🔵': grid[r][c] = '㊗️'
                 continue
 
+            # 이전 승자와 현재 승자가 다를 경우, 새로운 열 시작
             if winner != last_winner:
                 col += 1
                 row = 0
+            # 이전 승자와 현재 승자가 같을 경우, 아래로 이동
             else:
                 row += 1
             
+            # 6행을 넘어가면 옆으로 꺾이는 '드래곤 테일'
             if row >= 6:
                 col += 1
                 row = 5
@@ -84,7 +105,7 @@ def build_message_text(user_id):
 
     big_road_text = "\n".join(["".join(r) for r in grid])
 
-    # 4. AI 추천 결과 색상(이모지) 표시
+    # AI 추천 결과 텍스트
     rec_text = ""
     if recommendation:
         if recommendation == "Banker":
@@ -92,21 +113,20 @@ def build_message_text(user_id):
         else: # Player
             rec_text = f"\n\n👇 *AI 추천* 👇\n🔵 *플레이어에 베팅하세요*"
 
-    # [수정] 일반 텍스트 부분에 escape_markdown 함수 적용
+    # 일반 텍스트 부분 이스케이프 처리
     title = "ZENTRA AI 분석"
     subtitle = "승리한 쪽의 버튼을 눌러 기록을 누적하세요."
     player_title = "플레이어"
     banker_title = "뱅커"
     history_title = "전체 기록 (Big Road)"
     
-    # 특수문자 이스케이프 처리
     special_chars = "_*[]()~`>#+-.=|{}!"
     for char in special_chars:
-        if char in title: title = title.replace(char, f"\\{char}")
-        if char in subtitle: subtitle = subtitle.replace(char, f"\\{char}")
-        if char in player_title: player_title = player_title.replace(char, f"\\{char}")
-        if char in banker_title: banker_title = banker_title.replace(char, f"\\{char}")
-        if char in history_title: history_title = history_title.replace(char, f"\\{char}")
+        title = title.replace(char, f"\\{char}")
+        subtitle = subtitle.replace(char, f"\\{char}")
+        player_title = player_title.replace(char, f"\\{char}")
+        banker_title = banker_title.replace(char, f"\\{char}")
+        history_title = history_title.replace(char, f"\\{char}")
 
     return f"""*{title}*
 {subtitle}
