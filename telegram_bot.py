@@ -30,7 +30,7 @@ def load_results():
 # --- 이미지 생성 함수 ---
 def create_big_road_image(history):
     cell_size = 22
-    rows, cols = 6, 60
+    rows, cols = 6, 22
     top_padding = 30
     bottom_padding = 30
     width = cols * cell_size
