@@ -1,9 +1,10 @@
-# telegram_bot.py (Locking Version)
+# telegram_bot.py (Final Version with All Fixes)
 
 import os
 import json
-import asyncio # 잠금 기능을 위한 asyncio 라이브러리
-from collections import defaultdict # 사용자별 잠금을 위한 defaultdict
+import asyncio
+import math
+from collections import defaultdict
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
 from telegram.ext import Application, CommandHandler, CallbackContext, CallbackQueryHandler
@@ -16,21 +17,55 @@ TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
-# --- [새로운 기능] 사용자별 잠금 장치 ---
 user_locks = defaultdict(asyncio.Lock)
-# ------------------------------------
 
-# --- 이미지 생성, GPT 분석, 캡션/키보드 생성, 이스케이프 함수 등 ---
-# (이전 답변과 동일하므로 생략)
-def create_big_road_image(history):
+# --- 이미지 생성 함수 ---
+def create_big_road_image(history, page=0):
     cell_size = 22
-    rows, cols = 6, 60
-    top_padding = 30
-    bottom_padding = 30
-    width = cols * cell_size
-    height = rows * cell_size + top_padding + bottom_padding
+    rows, cols_per_page = 6, 20
     
-    img = Image.new('RGB', (width, height), color = '#f4f6f9')
+    # 전체 논리적 그리드 생성
+    full_grid_cols = 60
+    full_grid = [[''] * full_grid_cols for _ in range(rows)]
+    last_positions = {}
+
+    if history:
+        col, row = -1, 0
+        last_winner = None
+        for i, winner in enumerate(history):
+            if winner == 'T':
+                # Use the character representation for tie
+                if last_winner and last_winner in last_positions:
+                    r, c = last_positions[last_winner]
+                    if full_grid[r][c]:
+                        full_grid[r][c] += 'T'
+                continue
+
+            if winner != last_winner:
+                col += 1
+                row = 0
+            else:
+                row += 1
+            
+            if row >= rows:
+                col += 1
+                row = rows - 1
+
+            if col < full_grid_cols:
+                full_grid[row][col] = winner
+                last_positions[winner] = (row, col)
+            
+            last_winner = winner
+    
+    start_col = page * cols_per_page
+    end_col = start_col + cols_per_page
+    page_grid = [row[start_col:end_col] for row in full_grid]
+
+    top_padding = 30
+    width = cols_per_page * cell_size
+    height = rows * cell_size + top_padding
+    
+    img = Image.new('RGB', (width, height), color='#f4f6f9')
     draw = ImageDraw.Draw(img)
 
     try:
@@ -38,29 +73,29 @@ def create_big_road_image(history):
     except IOError:
         font = ImageFont.load_default()
     
-    total_cols_needed = 0
-    if history:
-        last_winner_for_col_count = None
-        current_col_for_count = -1
-        for winner in history:
-            if winner == 'T': continue
-            if winner != last_winner_for_col_count:
-                current_col_for_count += 1
-            last_winner_for_col_count = winner
-        total_cols_needed = current_col_for_count + 1
-
-    cols_per_page = 20
-    total_pages = math.ceil(total_cols_needed / cols_per_page)
-    current_page = user_data.get(update.effective_user.id, {}).get('page', 0) if 'update' in locals() and update.effective_user else 0
+    total_cols = max(col + 1, 1) if 'col' in locals() and 'col' in locals() else 1
+    total_pages = math.ceil(total_cols / cols_per_page)
+    draw.text((10, 5), f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})", fill="black", font=font)
     
-    draw.text((10, 5), f"ZENTRA AI - Big Road (Page {current_page + 1} / {total_pages})", fill="black", font=font)
-    
-    # ... 이하 이미지 생성 로직은 이전과 동일 ...
+    for r in range(rows):
+        for c in range(cols_per_page):
+            x1, y1 = c * cell_size, r * cell_size + top_padding
+            x2, y2 = (c + 1) * cell_size, (r + 1) * cell_size + top_padding
+            draw.rectangle([(x1, y1), (x2, y2)], outline='lightgray')
+            
+            cell_data = page_grid[r][c]
+            if cell_data:
+                winner_char = cell_data[0]
+                color = "#3498db" if winner_char == 'P' else "#e74c3c"
+                draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=3)
+                if 'T' in cell_data:
+                    draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill='#2ecc71', width=2)
     
     image_path = "baccarat_road.png"
     img.save(image_path)
     return image_path
-    
+
+# --- GPT-4 분석 함수 ---
 def get_gpt4_recommendation(history):
     prompt = f"Baccarat history: {history}. Recommend Player or Banker."
     try:
@@ -71,96 +106,13 @@ def get_gpt4_recommendation(history):
         print(f"GPT-4 API Error: {e}")
         return "Banker"
 
-def build_caption_text(user_id, is_analyzing=False):
-    # ... (생략)
-    pass
-    
-def escape_markdown(text: str) -> str:
-    # ... (생략)
-    pass
-    
-def build_keyboard(user_id):
-    # ... (생략)
-    pass
-    
-async def start(update: Update, context: CallbackContext) -> None:
-    # ... (생략)
-    pass
-
-# --- 텔레그램 버튼 처리 함수 (잠금 기능 적용) ---
-async def button_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    
-    # 사용자별 잠금 획득 시도
-    lock = user_locks[user_id]
-    if lock.locked():
-        # 이미 다른 요청을 처리 중이면, 현재 요청은 무시하고 사용자에게 알림
-        await query.answer("처리 중입니다. 잠시 후 다시 시도해주세요.")
-        return
-
-    async with lock: # 잠금 시작 (이 블록이 끝나면 자동으로 해제됨)
-        await query.answer() # 먼저 버튼 눌림에 대한 응답 전송
-        
-        if user_id not in user_data:
-            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-        
-        action = query.data
-        data = user_data[user_id]
-        is_analyzing = False
-
-        if action in ['P', 'B', 'T']:
-            if action == 'P': data['player_wins'] += 1
-            elif action == 'B': data['banker_wins'] += 1
-            data['history'].append(action)
-            data['recommendation'] = None
-            data['page'] = 0
-        elif action == 'reset':
-            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-        elif action == 'page_next':
-            data['page'] += 1
-        elif action == 'page_prev':
-            data['page'] -= 1
-        elif action == 'analyze':
-            if not data['history']:
-                # 'answer_callback_query'는 잠금이 필요 없음
-                await context.bot.answer_callback_query(query.id, text="분석할 기록이 없습니다.")
-                return
-            
-            is_analyzing = True
-            # ... (분석 중 메시지 표시 로직)
-            
-            history_str = ", ".join(data['history'])
-            recommendation = get_gpt4_recommendation(history_str)
-            data['recommendation'] = recommendation
-            is_analyzing = False
-
-        try:
-            image_path = create_big_road_image(data['history'], page=data.get('page', 0))
-            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
-            await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
-        except Exception as e:
-            print(f"메시지 수정 오류: {e}")
-
-# --- 봇 실행 메인 함수 ---
-def main() -> None:
-    application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
-    application.add_handler(CommandHandler("start", start))
-    application.add_handler(CallbackQueryHandler(button_callback))
-    print("텔레그램 봇이 시작되었습니다...")
-    application.run_polling(drop_pending_updates=True)
-
-if __name__ == "__main__":
-    main()
-
-# --- 생략된 함수의 전체 코드 ---
-# (이전 답변의 코드를 여기에 붙여넣으세요)
-
+# --- 캡션 및 키보드 생성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
     data = user_data.get(user_id, {})
-    player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
+    player_wins = data.get('player_wins', 0)
+    banker_wins = data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
-    
+
     rec_text = ""
     if is_analyzing:
         rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
@@ -197,18 +149,19 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')],
-        [InlineKeyboardButton("🔍 분석 후 베팅 추천", callback_data='analyze'), InlineKeyboardButton("🔄 초기화", callback_data='reset')]
+        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
     ]
     if page_buttons:
-        keyboard.insert(2, page_buttons)
+        keyboard.append(page_buttons)
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천", callback_data='analyze'), InlineKeyboardButton("🔄 초기화", callback_data='reset')])
         
     return InlineKeyboardMarkup(keyboard)
 
+# --- 텔레그램 명령어 및 버튼 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-    image_path = create_big_road_image(user_data[user_id]['history'], page=0)
+    image_path = create_big_road_image([], page=0)
     await update.message.reply_photo(
         photo=open(image_path, 'rb'),
         caption=build_caption_text(user_id),
@@ -218,46 +171,59 @@ async def start(update: Update, context: CallbackContext) -> None:
 
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
-    await query.answer()
     user_id = query.from_user.id
     
-    if user_id not in user_data:
-        user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-    
-    action = query.data
-    data = user_data[user_id]
-    is_analyzing = False
+    lock = user_locks[user_id]
+    if lock.locked():
+        await query.answer("처리 중입니다. 잠시 후 다시 시도해주세요.")
+        return
 
-    if action in ['P', 'B', 'T']:
-        if action == 'P': data['player_wins'] += 1
-        elif action == 'B': data['banker_wins'] += 1
-        data['history'].append(action)
-        data['recommendation'] = None
-        data['page'] = 0 # 기록 추가 시 첫 페이지로
-    elif action == 'reset':
-        user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
-    elif action == 'page_next':
-        data['page'] += 1
-    elif action == 'page_prev':
-        data['page'] -= 1
-    elif action == 'analyze':
-        if not data['history']:
-            await context.bot.answer_callback_query(query.id, text="분석할 기록이 없습니다.")
-            return
+    async with lock:
+        await query.answer()
         
-        is_analyzing = True
-        # ... (분석 중 메시지 표시 로직은 이전과 동일하게 유지)
-        recommendation = get_gpt4_recommendation(", ".join(data['history']))
-        data['recommendation'] = recommendation
+        if user_id not in user_data:
+            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
+        
+        action = query.data
+        data = user_data[user_id]
         is_analyzing = False
 
-    image_path = create_big_road_image(data['history'], page=data['page'])
-    media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
-    await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
+        if action in ['P', 'B', 'T']:
+            if action == 'P': data['player_wins'] += 1
+            elif action == 'B': data['banker_wins'] += 1
+            data['history'].append(action)
+            data['recommendation'] = None
+            data['page'] = 0
+        elif action == 'reset':
+            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0}
+        elif action == 'page_next':
+            data['page'] += 1
+        elif action == 'page_prev':
+            data['page'] -= 1
+        elif action == 'analyze':
+            if not data['history']:
+                await context.bot.answer_callback_query(query.id, text="분석할 기록이 없습니다.")
+                return
+            
+            is_analyzing = True
+            image_path = create_big_road_image(data['history'], page=data.get('page', 0))
+            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2)
+            await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
+
+            history_str = ", ".join(data['history'])
+            recommendation = get_gpt4_recommendation(history_str)
+            data['recommendation'] = recommendation
+            is_analyzing = False
+
+        try:
+            image_path = create_big_road_image(data['history'], page=data.get('page', 0))
+            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
+            await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
+        except Exception as e:
+            print(f"메시지 수정 오류: {e}")
 
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
-    # ... (생략, 기존 코드와 동일)
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
