@@ -140,7 +140,7 @@ def build_caption_text(user_id, is_analyzing=False):
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅에 참조하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); subtitle = escape_markdown("실제 승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
     return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
