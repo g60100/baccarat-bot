@@ -161,10 +161,12 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
 
     prompt = f"""
     당신은 세계 최고의 바카라 데이터 분석가입니다. 당신의 임무는 주어진 데이터를 분석하여 가장 확률 높은 다음 베팅을 추천하는 것입니다.
+    
     [분석 규칙]
-    1. 먼저 게임 기록의 패턴(연속성, 전환 등)을 분석하고 그 이유를 간략히 서술합니다.
-    2. 그 다음, 당신의 과거 추천 실적을 보고 현재 당신의 전략이 잘 맞고 있는지 평가합니다.
+    1. 게임 기록의 패턴을 분석합니다. 단순히 마지막 결과를 따라가는 추천은 지양하고, 연속(Streak) 패턴과 전환(Chop) 패턴을 모두 고려하여 깊이있는 분석을 하십시오.
+    2. 당신의 과거 추천 실적을 보고 현재 당신의 분석 전략이 잘 맞고 있는지 평가합니다.
     3. 이 두 가지 분석을 종합하여, 최종 추천을 "추천:" 이라는 단어 뒤에 Player 또는 Banker 로만 결론내립니다.
+
     [데이터 1: 현재 게임의 흐름]
     {game_history}
     [데이터 2: 당신의 과거 추천 실적]
@@ -233,6 +235,9 @@ def build_caption_text(user_id, is_analyzing=False):
 
 def _get_page_info(history):
     """히스토리를 기반으로 마지막 열과 전체 페이지 수를 계산하는 헬퍼 함수"""
+    if not history:
+        return -1, 1
+
     last_col = -1
     last_winner = None
     for winner in history:
@@ -240,38 +245,41 @@ def _get_page_info(history):
         if winner != last_winner: last_col += 1
         last_winner = winner
     
-    total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
-    # total_pages는 최소 1이 되어야 합니다.
-    total_pages = max(1, total_pages)
+    # 마지막 열 인덱스가 0부터 시작하므로 +1을 해줘야 실제 열 개수
+    total_cols = last_col + 1
+    total_pages = math.ceil(total_cols / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
     
-    return last_col, total_pages
+    return last_col, max(1, total_pages)
 
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
     history = data.get('history', [])
     
-    # 새로운 헬퍼 함수를 사용하여 페이지 정보 계산
+    # 수정된 헬퍼 함수를 사용하여 페이지 정보 계산
     last_col, total_pages = _get_page_info(history)
     
     page_buttons = []
-    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
-    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+    # 페이지가 2개 이상일 때만 방향키가 보이도록 조건 수정
+    if total_pages > 1:
+        if page > 0: 
+            page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+        if page < total_pages - 1: 
+            page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     keyboard = [
-        [InlineKeyboardButton("🔵 플레이어 (수동 기록)", callback_data='P'), InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
+        [InlineKeyboardButton("🔵 플레이어(수동 기록)", callback_data='P'), InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
         [InlineKeyboardButton("🟢 타이 (수동 기록)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI분석 수동 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI분석 수요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
-        # [수정] 문자열 바깥쪽을 작은따옴표로 변경하여 구문 오류 해결
         keyboard.append([
-            InlineKeyboardButton(f'✅AI추천"승"클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
-            InlineKeyboardButton(f'❌AI추천"패"클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
+            InlineKeyboardButton(f'✅ AI추천"승" 클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
+            InlineKeyboardButton(f'❌ AI추천"패" 클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
