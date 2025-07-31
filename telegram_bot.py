@@ -151,6 +151,68 @@ def get_feedback_stats():
     # ...
     pass
 
+# telegram_bot.py 파일에 이 함수를 추가하세요.
+
+def create_big_road_image(user_id):
+    data = user_data.get(user_id, {})
+    history = data.get('history', [])
+    page = data.get('page', 0)
+    correct_indices = data.get('correct_indices', [])
+    
+    cell_size = 22; rows, cols_per_page = 6, 30
+    full_grid_cols = 120
+    full_grid = [[''] * full_grid_cols for _ in range(rows)]
+    last_positions = {}
+    
+    pb_history_index = -1
+    if history:
+        col, row, last_winner = -1, 0, None
+        for i, winner in enumerate(history):
+            if winner == 'T':
+                if last_winner and last_winner in last_positions:
+                    r, c = last_positions[last_winner]
+                    if full_grid[r][c]: full_grid[r][c] += 'T'
+                continue
+            pb_history_index += 1
+            if winner != last_winner: col += 1; row = 0
+            else: row += 1
+            if row >= rows: col += 1; row = rows - 1
+            if col < full_grid_cols: 
+                is_correct = 'C' if pb_history_index in correct_indices else ''
+                full_grid[row][col] = winner + is_correct
+                last_positions[winner] = (row, col)
+            last_winner = winner
+    
+    start_col = page * cols_per_page; end_col = start_col + cols_per_page
+    page_grid = [row[start_col:end_col] for row in full_grid]
+    top_padding = 30; width = cols_per_page * cell_size; height = rows * cell_size + top_padding
+    img = Image.new('RGB', (width, height), color='#f4f6f9')
+    draw = ImageDraw.Draw(img)
+    try: font = ImageFont.truetype("arial.ttf", 16)
+    except IOError: font = ImageFont.load_default()
+    
+    total_cols_needed = max(col + 1, 1) if 'col' in locals() else 1
+    total_pages = math.ceil(total_cols_needed / cols_per_page) if cols_per_page > 0 else 1
+    draw.text((10, 5), f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})", fill="black", font=font)
+    
+    for r in range(rows):
+        for c in range(cols_per_page):
+            x1, y1 = c * cell_size, r * cell_size + top_padding
+            x2, y2 = (c + 1) * cell_size, (r + 1) * cell_size + top_padding
+            draw.rectangle([(x1, y1), (x2, y2)], outline='lightgray')
+            cell_data = page_grid[r][c]
+            if cell_data:
+                winner_char = cell_data[0]
+                is_correct_prediction = 'C' in cell_data
+                color = "#3498db" if winner_char == 'P' else "#e74c3c"
+                if is_correct_prediction:
+                    draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], fill=color, outline=color, width=3)
+                else:
+                    draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=3)
+                if 'T' in cell_data: draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill='#2ecc71', width=2)
+    
+    image_path = "baccarat_road.png"; img.save(image_path)
+    return image_path
 def get_gpt4_recommendation(game_history, ai_performance_history):
     # ...
     pass
