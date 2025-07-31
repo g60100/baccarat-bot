@@ -273,7 +273,7 @@ def build_keyboard(user_id):
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI분석 수요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI분석 수동 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
