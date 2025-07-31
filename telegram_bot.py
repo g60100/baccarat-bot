@@ -311,21 +311,22 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         elif action in ['feedback_win', 'feedback_loss']:
             if data.get('recommendation_info'):
                 outcome = 'win' if action == 'feedback_win' else 'loss'
-                log_activity(user_id, "feedback", f"{data['recommendation']}:{outcome}")
-                results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
+                rec_info = data['recommendation_info']
+                
+                actual_winner = rec_info['bet_on'] if outcome == 'win' else ('P' if rec_info['bet_on'] == 'B' else 'B')
+                data['history'].append(actual_winner)
+                if actual_winner == 'P': data['player_wins'] += 1
+                else: data['banker_wins'] += 1
+                
+                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:{outcome}")
+                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
                 
-                # --- [버그 수정] 추천 적중 기록 로직 ---
                 if outcome == 'win':
-                    rec_info = data['recommendation_info']
-                    pb_history = [h for h in data['history'] if h != 'T']
-                    # 추천은 다음 라운드에 대한 것이므로, 현재 P/B 기록 길이는 추천 시점+1 이어야 함
-                    if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] + 1 == len(pb_history):
-                         # P/B 기록의 마지막 인덱스를 저장
-                         data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-                # --- 여기까지 ---
+                    pb_history_len = len([h for h in data['history'] if h != 'T'])
+                    data.setdefault('correct_indices', []).append(pb_history_len - 1)
 
-                await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
+                await context.bot.answer_callback_query(query.id, text=f"피드백({outcome}) 및 다음 결과({actual_winner})를 기록했습니다!")
                 data['recommendation'] = None
                 data['recommendation_info'] = None
             else: 
