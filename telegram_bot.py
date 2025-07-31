@@ -275,6 +275,34 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['history'].append(action)
             data['recommendation'] = None
             data['recommendation_info'] = None
+            should_analyze = # [최종 수정] 데이터 형식 불일치 오류를 해결한 최종 버전
+async def button_callback(update: Update, context: CallbackContext) -> None:
+    query = update.callback_query
+    user_id = query.from_user.id
+    lock = user_locks[user_id]
+
+    if lock.locked():
+        await query.answer("처리 중입니다...")
+        return
+        
+    async with lock:
+        await query.answer()
+        if user_id not in user_data:
+            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
+        
+        data = user_data[user_id]
+        action = query.data
+        log_activity(user_id, "button_click", action)
+
+        should_analyze = False
+        update_ui_only = False
+
+        if action in ['P', 'B', 'T']:
+            data['history'].append(action) # 'P', 'B', 'T' 한 글자로 추가 (정상)
+            if action == 'P': data['player_wins'] += 1
+            elif action == 'B': data['banker_wins'] += 1
+            data['recommendation'] = None
+            data['recommendation_info'] = None
             should_analyze = True
 
         elif action == 'reset':
@@ -298,16 +326,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
 
-            print("\n---[✅ AI 추천 승리 디버그 시작]---")
-            recommendation = rec_info['bet_on']
-            print(f"AI 추천: {recommendation}")
-            print(f"계산된 실제 결과: {recommendation}")
-            data['history'].append(recommendation)
-            print(f"히스토리 추가 후: {data['history']}")
-            print("---[✅ AI 추천 승리 디버그 종료]---\n")
+            recommendation = rec_info['bet_on'] # "Player" 또는 "Banker"
+            # === [수정] 전체 단어를 'P' 또는 'B' 한 글자로 변환하여 추가 ===
+            result_to_add = 'P' if recommendation == "Player" else 'B'
+            data['history'].append(result_to_add)
 
-            if recommendation == 'P': data['player_wins'] += 1
-            elif recommendation == 'B': data['banker_wins'] += 1
+            if result_to_add == 'P': data['player_wins'] += 1
+            elif result_to_add == 'B': data['banker_wins'] += 1
             
             pb_history = [h for h in data['history'] if h != 'T']
             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
@@ -322,14 +347,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
             
-            print("\n---[❌ AI 추천 패배 디버그 시작]---")
-            recommendation = rec_info['bet_on']
-            print(f"AI 추천: {recommendation}")
-            opposite_result = 'P' if recommendation == 'B' else 'B'
-            print(f"계산된 실제 결과 (추천의 반대): {opposite_result}")
+            recommendation = rec_info['bet_on'] # "Player" 또는 "Banker"
+            # === [수정] 전체 단어 기준으로 반대 결과를 'P' 또는 'B' 한 글자로 계산 ===
+            opposite_result = 'P' if recommendation == "Banker" else 'B'
             data['history'].append(opposite_result)
-            print(f"히스토리 추가 후: {data['history']}")
-            print("---[❌ AI 추천 패배 디버그 종료]---\n")
             
             if opposite_result == 'P': data['player_wins'] += 1
             elif opposite_result == 'B': data['banker_wins'] += 1
@@ -339,7 +360,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
             should_analyze = True
 
-        # --- 통합 분석 및 UI 업데이트 로직 ---
+        # --- 통합 분석 및 UI 업데이트 로직 (수정 없음) ---
         if should_analyze:
             history = data['history']
             last_col = -1; last_winner = None
