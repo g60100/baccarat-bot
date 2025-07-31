@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Bugfix Version)
+# telegram_bot.py (Final Verified Version - All features included)
 
 import os
 import json
@@ -32,7 +32,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 RESULTS_LOG_FILE = 'results_log.json' 
 DB_FILE = 'baccarat_stats.db' 
-COLS_PER_PAGE = 20
+COLS_PER_PAGE = 20 # 페이지당 열 개수 설정
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -52,8 +52,7 @@ def log_activity(user_id, action, details=""):
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)",
-                       (user_id, timestamp, action, details))
+        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)", (user_id, timestamp, action, details))
         conn.commit()
     except Exception as e:
         print(f"DB Log Error: {e}")
@@ -201,10 +200,10 @@ def build_caption_text(user_id, is_analyzing=False):
 """
 
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4 AI가 분석중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4 AI 분석으로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
     subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
@@ -228,17 +227,17 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 승리 기록 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI분석 후 베팅추천요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 모두 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ AI추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ AI추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -310,25 +309,26 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             is_analyzing = False
         
         elif action in ['feedback_win', 'feedback_loss']:
-            if data.get('recommendation'):
+            if data.get('recommendation_info'):
                 outcome = 'win' if action == 'feedback_win' else 'loss'
                 log_activity(user_id, "feedback", f"{data['recommendation']}:{outcome}")
                 results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
                 
                 # --- [버그 수정] 추천 적중 기록 로직 ---
-                if outcome == 'win' and 'recommendation_info' in data:
+                if outcome == 'win':
                     rec_info = data['recommendation_info']
                     pb_history = [h for h in data['history'] if h != 'T']
-                    # 추천은 다음 라운드에 대한 것이므로, 현재 P/B 기록 길이는 추천 시점+1 이어야 함
-                    if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] + 1 == len(pb_history):
-                         # P/B 기록의 마지막 인덱스를 저장
+                    if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history):
                          data.setdefault('correct_indices', []).append(len(pb_history) - 1)
                 # --- 여기까지 ---
 
                 await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
                 data['recommendation'] = None
-            else: return
+                data['recommendation_info'] = None
+            else: 
+                await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
+                return
 
         try:
             image_path = create_big_road_image(user_id)
