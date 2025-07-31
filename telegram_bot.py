@@ -124,9 +124,9 @@ def create_big_road_image(user_id):
     
     # --- 수정된 부분: 크기 복원 ---
     cell_size = 22
-    rows = 6            # 아래 행 개수를 5개에서 6개로 복원
-    cols_per_page = 20  # 옆으로 열 개수를 30개 설정
-    top_padding = 30    # 무엇인지 체크해서 입력
+    rows = 6            # 아래 행 개수를 6개로 설정
+    cols_per_page = 20  # 옆으로 열 개수를 20개 설정
+    top_padding = 20    # 무엇인지 체크해서 입력
     # --- 여기까지 수정 ---
     
     full_grid_cols = 120
