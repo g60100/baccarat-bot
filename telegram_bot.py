@@ -1,11 +1,9 @@
-# telegram_bot.py (Final Version with Guide)
+# telegram_bot.py (Final Version - All features included)
 
 import os
 import json
 import asyncio
 import math
-import sqlite3
-import datetime
 from collections import defaultdict
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
@@ -25,38 +23,19 @@ user_locks = defaultdict(asyncio.Lock)
 
 # --- [DB] 데이터베이스 설정 함수 ---
 def setup_database():
-    """프로그램 시작 시 데이터베이스와 테이블을 생성합니다."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_seen TEXT,
-            last_seen TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS activity (
-            activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            timestamp TEXT,
-            action TEXT,
-            details TEXT
-        )
-    ''')
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_seen TEXT, last_seen TEXT)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS activity (activity_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, timestamp TEXT, action TEXT, details TEXT)')
     conn.commit()
     conn.close()
 
-# --- [DB] 데이터베이스 기록 함수 ---
 def log_activity(user_id, action, details=""):
-    """사용자의 활동을 데이터베이스에 기록합니다."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)",
-                       (user_id, timestamp, action, details))
+        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)", (user_id, timestamp, action, details))
         conn.commit()
     except Exception as e:
         print(f"DB Log Error: {e}")
@@ -112,20 +91,13 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
         return "Banker"
 
 # --- 이미지/캡션/키보드 생성 함수 ---
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 def create_big_road_image(user_id):
     data = user_data.get(user_id, {})
     history = data.get('history', [])
     page = data.get('page', 0)
     correct_indices = data.get('correct_indices', [])
     
-    # --- 수정된 부분: 크기 복원 ---
-    cell_size = 22
-    rows = 6            # 아래 행 개수를 6개로 설정
-    cols_per_page = 20  # 옆으로 열 개수를 20개 설정
-    top_padding = 20    # 무엇인지 체크해서 입력
-    # --- 여기까지 수정 ---
-    
+    cell_size = 22; rows, cols_per_page = 6, 20
     full_grid_cols = 120
     full_grid = [[''] * full_grid_cols for _ in range(rows)]
     last_positions = {}
@@ -142,7 +114,7 @@ def create_big_road_image(user_id):
             pb_history_index += 1
             if winner != last_winner: col += 1; row = 0
             else: row += 1
-            if row >= rows: col += 1; row = rows - 1 # 6행을 넘어가면 꺾임
+            if row >= rows: col += 1; row = rows - 1
             if col < full_grid_cols: 
                 is_correct = 'C' if pb_history_index in correct_indices else ''
                 full_grid[row][col] = winner + is_correct
@@ -151,7 +123,7 @@ def create_big_road_image(user_id):
     
     start_col = page * cols_per_page; end_col = start_col + cols_per_page
     page_grid = [row[start_col:end_col] for row in full_grid]
-    width = cols_per_page * cell_size; height = rows * cell_size + top_padding
+    top_padding = 30; width = cols_per_page * cell_size; height = rows * cell_size + top_padding
     img = Image.new('RGB', (width, height), color='#f4f6f9')
     draw = ImageDraw.Draw(img)
     try: font = ImageFont.truetype("arial.ttf", 16)
@@ -171,7 +143,6 @@ def create_big_road_image(user_id):
                 winner_char = cell_data[0]
                 is_correct_prediction = 'C' in cell_data
                 color = "#3498db" if winner_char == 'P' else "#e74c3c"
-                # 추천 적중 시 내부를 채우도록 수정
                 if is_correct_prediction:
                     draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], fill=color, outline=color, width=2)
                 else:
@@ -186,41 +157,20 @@ def build_caption_text(user_id, is_analyzing=False):
     player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
     
-    # --- [새로운 기능] 안내 문구 추가 ---
-    guide_text = """
-= Zentra 분석기 사용 순서 =
-1. 마지막 배팅결과를 "승리 기록" 버튼에 기록한다.
-2. "AI분석 후 베팅추천요청" 버튼을 클릭한다.
-3.👇AI추천참조👇AI가 추천하는 베팅을 참조한다.
-4. 실제적으로 본인이 선택해서 게임에 베팅한다.
-5. 게임결과 AI추천대로 "승"/"패"인지 평가한다.
-6. 최종 게임결과를 "승리 기록" 버튼을 클릭한다.
-7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
-* 위 내용을 순서대로 반복 기록한다.
-= 쳇GPT AI 분석 기준 =
-1. 전세계 최고전문가 입장에서 바카라를 분석한다.
-2. 과거와 현재의 데이터를 기반으로 분석한다.
-3. 현재 본인이 기록한 패턴을 참조해서 분석한다.
-4. AI자신이 추천한 베팅의 "패"시 원인 분석한다.
-5. 동전을 던졌을때 나올 확률처럼 참조용이다.
-"""
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4 최신AI가 분석중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
-    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
-    # [수정] 최종 메시지에 안내 문구 포함
-    return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
     history = data.get('history', [])
-    cols_per_page = 20 # <-- 20칸으로 수정
+    cols_per_page = 20
     last_col = -1; last_winner = None
     for winner in history:
         if winner == 'T': continue
@@ -252,7 +202,6 @@ def escape_markdown(text: str) -> str:
     escape_chars = r'_*[]()~`>#+-.=|{}!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
-# --- 텔레그램 명령어 및 버튼 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
@@ -275,7 +224,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
@@ -288,13 +236,15 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         action = query.data; data = user_data[user_id]; is_analyzing = False
         
+        log_activity(user_id, "button_click", action)
+
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
             data['history'].append(action); data['recommendation'] = None
             
             history = data['history']
-            cols_per_page = 20 # <-- 20칸으로 수정
+            cols_per_page = 20
             last_col = -1; last_winner = None
             for winner in history:
                 if winner == 'T': continue
@@ -322,6 +272,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         elif action in ['feedback_win', 'feedback_loss']:
             if data.get('recommendation'):
                 outcome = 'win' if action == 'feedback_win' else 'loss'
+                log_activity(user_id, "feedback", f"{data['recommendation']}:{outcome}")
                 results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
                 
@@ -343,7 +294,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
         except Exception as e: print(f"메시지 수정 오류: {e}")
 
-# --- 봇 실행 메인 함수 ---
 def main() -> None:
     setup_database()
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
