@@ -189,7 +189,7 @@ def build_caption_text(user_id, is_analyzing=False):
     recommendation = data.get('recommendation', None)
     
     guide_text = """
-= Zentra 분석기 사용 순서 =
+= Zentra ChetGPT-4o AI 분석기 사용 순서 =
 1. 실제 게임 결과를 '수동 기록' 버튼으로 입력합니다.
  (입력 즉시 AI가 다음 게임을 분석/추천합니다)
 2. AI의 추천을 참고하여 실제 게임에 베팅합니다.
@@ -208,17 +208,28 @@ def build_caption_text(user_id, is_analyzing=False):
     
     return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
+def _get_page_info(history):
+    """히스토리를 기반으로 마지막 열과 전체 페이지 수를 계산하는 헬퍼 함수"""
+    last_col = -1
+    last_winner = None
+    for winner in history:
+        if winner == 'T': continue
+        if winner != last_winner: last_col += 1
+        last_winner = winner
+    
+    total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
+    # total_pages는 최소 1이 되어야 합니다.
+    total_pages = max(1, total_pages)
+    
+    return last_col, total_pages
+
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
     history = data.get('history', [])
     
-    last_col = -1; last_winner = None
-    for winner in history:
-        if winner == 'T': continue
-        if winner != last_winner: last_col +=1
-        last_winner = winner
-    total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
+    # 새로운 헬퍼 함수를 사용하여 페이지 정보 계산
+    last_col, total_pages = _get_page_info(history)
     
     page_buttons = []
     if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
@@ -333,13 +344,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
         # --- 통합 분석 및 UI 업데이트 로직 ---
         if should_analyze:
-            history = data['history']
-            last_col = -1; last_winner = None
-            for winner in history:
-                if winner == 'T': continue
-                if winner != last_winner: last_col +=1
-                last_winner = winner
-            total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
+            # 새로운 헬퍼 함수를 사용하여 페이지 정보 계산
+            last_col, total_pages = _get_page_info(data['history'])
+            # 마지막 페이지로 자동 이동
             data['page'] = max(0, total_pages - 1)
 
             image_path = create_big_road_image(user_id)
@@ -367,6 +374,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             except Exception as e:
                 if "Message is not modified" not in str(e):
                     print(f"메시지 수정 오류: {e}")
+
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
     setup_database()
