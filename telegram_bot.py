@@ -234,8 +234,8 @@ def build_keyboard(user_id):
     last_col, total_pages = _get_page_info(history)
     
     page_buttons = []
-    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전 이동", callback_data='page_prev'))
-    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 이동 ➡️", callback_data='page_next'))
+    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 (수동 기록)", callback_data='P'), InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
@@ -243,13 +243,14 @@ def build_keyboard(user_id):
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 ChetGPT-4o AI 분석수동요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI 분석 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
+        # [수정] 문자열 바깥쪽을 작은따옴표로 변경하여 구문 오류 해결
         keyboard.append([
-            InlineKeyboardButton(f"✅ AI추천 "승"시 클릭  ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ AI추천 "패"시 클릭 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f'✅ AI추천 "승"시 클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
+            InlineKeyboardButton(f'❌ AI추천 "패"시 클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
