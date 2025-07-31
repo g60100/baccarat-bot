@@ -181,6 +181,27 @@ def build_caption_text(user_id, is_analyzing=False):
     data = user_data.get(user_id, {})
     player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
+
+    # --- [새로운 기능] 안내 문구 추가 ---
+    guide_text = """
+= Zentra 분석기 사용 순서 =
+1\. 최근 나온 배팅 결과를 승리 기록 버튼에 기록한다\.
+2\. 분석 후 베팅 추천 요청 버튼을 클릭한다\.
+3\. 👇AI 추천 참조👇아래 AI가 추천하는 베팅을 참조한다\.
+4\. 실제적으로 본인이 선택해서 게임에 베팅한다\.
+5\. 게임 결과 AI 추천대로 승리인지 패배인지 평가한다\.
+6\. 최종 게임 결과를 승리 기록 버튼을 클릭한다\.
+7\. 분석 후 베팅 추천 요청 버튼을 클릭한다\.(2번)
+* 위 내용을 순서대로 반복 한다\.
+
+= 쳇GPT AI 분석 기준 =
+1\. 전세계 최고 전문가 입장에서 바카라를 분석한다\.
+2\. 과거와 현재의 데이터를 기반으로 분석한다\.
+3\. 현재 승리 기록 패턴을 참조해서 분석한다\.
+4\. AI자신이 추천한 베팅의 "패"시 원인 분석한다\.
+5\. 하지만 동전을 던졌을때 나올 확률처럼 참조용이다\.
+"""
+
     
     rec_text = ""
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
