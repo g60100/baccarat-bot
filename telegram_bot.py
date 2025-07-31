@@ -248,6 +248,7 @@ async def start(update: Update, context: CallbackContext) -> None:
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
+# [최종] 모든 오류를 수정한 button_callback 함수
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
@@ -270,35 +271,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         update_ui_only = False
 
         if action in ['P', 'B', 'T']:
-            if action == 'P': data['player_wins'] += 1
-            elif action == 'B': data['banker_wins'] += 1
             data['history'].append(action)
-            data['recommendation'] = None
-            data['recommendation_info'] = None
-            should_analyze = # [최종 수정] 데이터 형식 불일치 오류를 해결한 최종 버전
-async def button_callback(update: Update, context: CallbackContext) -> None:
-    query = update.callback_query
-    user_id = query.from_user.id
-    lock = user_locks[user_id]
-
-    if lock.locked():
-        await query.answer("처리 중입니다...")
-        return
-        
-    async with lock:
-        await query.answer()
-        if user_id not in user_data:
-            user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
-        
-        data = user_data[user_id]
-        action = query.data
-        log_activity(user_id, "button_click", action)
-
-        should_analyze = False
-        update_ui_only = False
-
-        if action in ['P', 'B', 'T']:
-            data['history'].append(action) # 'P', 'B', 'T' 한 글자로 추가 (정상)
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
             data['recommendation'] = None
@@ -327,7 +300,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 return
 
             recommendation = rec_info['bet_on'] # "Player" 또는 "Banker"
-            # === [수정] 전체 단어를 'P' 또는 'B' 한 글자로 변환하여 추가 ===
             result_to_add = 'P' if recommendation == "Player" else 'B'
             data['history'].append(result_to_add)
 
@@ -348,7 +320,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 return
             
             recommendation = rec_info['bet_on'] # "Player" 또는 "Banker"
-            # === [수정] 전체 단어 기준으로 반대 결과를 'P' 또는 'B' 한 글자로 계산 ===
             opposite_result = 'P' if recommendation == "Banker" else 'B'
             data['history'].append(opposite_result)
             
@@ -360,7 +331,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
             should_analyze = True
 
-        # --- 통합 분석 및 UI 업데이트 로직 (수정 없음) ---
+        # --- 통합 분석 및 UI 업데이트 로직 ---
         if should_analyze:
             history = data['history']
             last_col = -1; last_winner = None
@@ -396,7 +367,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             except Exception as e:
                 if "Message is not modified" not in str(e):
                     print(f"메시지 수정 오류: {e}")
-
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
     setup_database()
