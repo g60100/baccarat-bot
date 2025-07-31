@@ -99,14 +99,24 @@ def create_big_road_image(user_id):
                     r, c = last_positions[last_winner]
                     if full_grid[r][c]: full_grid[r][c] += 'T'
                 continue
+            
             pb_history_index += 1
-            if winner != last_winner: col += 1; row = 0
-            else: row += 1
-            if row >= rows: col += 1; row = rows - 1
+            
+            if winner != last_winner:
+                col += 1
+                row = 0
+            else:
+                row += 1
+            
+            if row >= rows:
+                col += 1
+                row = rows - 1
+
             if col < full_grid_cols: 
                 is_correct = 'C' if pb_history_index in correct_indices else ''
                 full_grid[row][col] = winner + is_correct
                 last_positions[winner] = (row, col)
+            
             last_winner = winner
     
     start_col = page * COLS_PER_PAGE; end_col = start_col + COLS_PER_PAGE
@@ -288,45 +298,42 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
 
+            print("\n---[✅ AI 추천 승리 디버그 시작]---")
             recommendation = rec_info['bet_on']
+            print(f"AI 추천: {recommendation}")
+            print(f"계산된 실제 결과: {recommendation}")
             data['history'].append(recommendation)
+            print(f"히스토리 추가 후: {data['history']}")
+            print("---[✅ AI 추천 승리 디버그 종료]---\n")
+
             if recommendation == 'P': data['player_wins'] += 1
             elif recommendation == 'B': data['banker_wins'] += 1
             
             pb_history = [h for h in data['history'] if h != 'T']
             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-
             log_activity(user_id, "feedback", f"{recommendation}:win")
             results = load_results(); results.append({"recommendation": recommendation, "outcome": "win"})
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
             should_analyze = True
         
-        # =================================================================
-        # ===                여기가 최종 수정된 로직입니다                ===
-        # =================================================================
         elif action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
             
-            # 1. AI의 추천이 무엇이었는지 확인합니다. (예: 'Banker')
+            print("\n---[❌ AI 추천 패배 디버그 시작]---")
             recommendation = rec_info['bet_on']
-            
-            # 2. 패배했으므로, 추천과 '반대'되는 실제 결과를 계산합니다.
-            #   만약 추천이 'Banker'였다면, opposite_result는 'Player'가 됩니다.
+            print(f"AI 추천: {recommendation}")
             opposite_result = 'P' if recommendation == 'B' else 'B'
-            
-            # 3. 계산된 '반대' 결과를 히스토리에 추가합니다.
+            print(f"계산된 실제 결과 (추천의 반대): {opposite_result}")
             data['history'].append(opposite_result)
+            print(f"히스토리 추가 후: {data['history']}")
+            print("---[❌ AI 추천 패배 디버그 종료]---\n")
             
-            # 4. 승리 횟수를 업데이트합니다.
-            if opposite_result == 'P': 
-                data['player_wins'] += 1
-            elif opposite_result == 'B': 
-                data['banker_wins'] += 1
+            if opposite_result == 'P': data['player_wins'] += 1
+            elif opposite_result == 'B': data['banker_wins'] += 1
 
-            # 5. 로그를 기록하고 분석을 준비합니다.
             log_activity(user_id, "feedback", f"{recommendation}:loss")
             results = load_results(); results.append({"recommendation": recommendation, "outcome": "loss"})
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
