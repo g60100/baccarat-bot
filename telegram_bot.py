@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Logic Corrected Version 3)
+# telegram_bot.py (Final Workflow Version)
 
 import os
 import json
@@ -30,8 +30,8 @@ from PIL import Image, ImageDraw, ImageFont
 # --- 설정 ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-RESULTS_LOG_FILE = 'results_log.json'
-DB_FILE = 'baccarat_stats.db'
+RESULTS_LOG_FILE = 'results_log.json' 
+DB_FILE = 'baccarat_stats.db' 
 COLS_PER_PAGE = 20
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -214,18 +214,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
     
-    conn = sqlite3.connect(DB_FILE)
-    cursor = conn.cursor()
-    cursor.execute("SELECT * FROM users WHERE user_id = ?", (user_id,))
-    user = cursor.fetchone()
-    now = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    if not user:
-        cursor.execute("INSERT INTO users (user_id, username, first_seen, last_seen) VALUES (?, ?, ?, ?)",
-                       (user_id, username, now, now))
-    else:
-        cursor.execute("UPDATE users SET last_seen = ?, username = ? WHERE user_id = ?", (now, username, user_id))
-    conn.commit()
-    conn.close()
     log_activity(user_id, "start")
 
     user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
@@ -249,7 +237,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
-            data['history'].append(action); 
+            data['history'].append(action)
             data['recommendation'] = None
             data['recommendation_info'] = None
             
@@ -290,7 +278,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             else: 
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
-
+        
         elif action == 'feedback_loss':
             if data.get('recommendation_info'):
                 rec_info = data['recommendation_info']
