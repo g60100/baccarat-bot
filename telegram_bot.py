@@ -12,8 +12,6 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Verified Version - All features included)
-
 import os
 import json
 import asyncio
@@ -32,7 +30,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 RESULTS_LOG_FILE = 'results_log.json'
 DB_FILE = 'baccarat_stats.db'
-COLS_PER_PAGE = 20 # 페이지당 열 개수 설정
+COLS_PER_PAGE = 20
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -163,7 +161,7 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
     {performance_text}
     """
     try:
-        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "You are a world-class Baccarat analyst who provides reasoning before the final recommendation."},{"role": "user", "content": prompt}])
+        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "You are a world-class Baccarat analyst."},{"role": "user", "content": prompt}])
         full_response = completion.choices[0].message.content
         if "추천:" in full_response:
             recommendation = full_response.split("추천:")[-1].strip()
@@ -200,7 +198,6 @@ def build_caption_text(user_id, is_analyzing=False):
     
     return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
-# [수정됨] 키보드 버튼 텍스트 및 로직 수정
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
@@ -236,15 +233,11 @@ def build_keyboard(user_id):
 # --- 텔레그램 명령어 및 버튼 처리 함수 ---
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
-    username = update.message.from_user.username or update.message.from_user.first_name
-    
     log_activity(user_id, "start")
-
     user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
-# [수정됨] 요청사항을 반영한 새로운 버튼 콜백 로직
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
@@ -261,7 +254,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         data = user_data[user_id]
         action = query.data
-        
         log_activity(user_id, "button_click", action)
 
         should_analyze = False
@@ -308,22 +300,33 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             results = load_results(); results.append({"recommendation": recommendation, "outcome": "win"})
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
             should_analyze = True
-            
+        
+        # =================================================================
+        # ===                여기가 최종 수정된 로직입니다                ===
+        # =================================================================
         elif action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
             
+            # 1. AI의 추천이 무엇이었는지 확인합니다. (예: 'Banker')
             recommendation = rec_info['bet_on']
-            # === 핵심 수정 사항: 추천의 '반대' 결과를 정확히 계산 ===
+            
+            # 2. 패배했으므로, 추천과 '반대'되는 실제 결과를 계산합니다.
+            #   만약 추천이 'Banker'였다면, opposite_result는 'Player'가 됩니다.
             opposite_result = 'P' if recommendation == 'B' else 'B'
             
-            # 반대 결과를 히스토리에 추가
+            # 3. 계산된 '반대' 결과를 히스토리에 추가합니다.
             data['history'].append(opposite_result)
-            if opposite_result == 'P': data['player_wins'] += 1
-            elif opposite_result == 'B': data['banker_wins'] += 1
+            
+            # 4. 승리 횟수를 업데이트합니다.
+            if opposite_result == 'P': 
+                data['player_wins'] += 1
+            elif opposite_result == 'B': 
+                data['banker_wins'] += 1
 
+            # 5. 로그를 기록하고 분석을 준비합니다.
             log_activity(user_id, "feedback", f"{recommendation}:loss")
             results = load_results(); results.append({"recommendation": recommendation, "outcome": "loss"})
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
@@ -331,7 +334,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
         # --- 통합 분석 및 UI 업데이트 로직 ---
         if should_analyze:
-            # (이하 분석 및 UI 업데이트 로직은 동일)
             history = data['history']
             last_col = -1; last_winner = None
             for winner in history:
@@ -342,10 +344,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['page'] = max(0, total_pages - 1)
 
             image_path = create_big_road_image(user_id)
-            await query.edit_message_media(
-                media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2),
-                reply_markup=build_keyboard(user_id)
-            )
+            try:
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2),
+                    reply_markup=build_keyboard(user_id)
+                )
+            except Exception as e:
+                if "Message is not modified" not in str(e): print(f"분석 중 표시 오류: {e}")
 
             ai_performance_history = load_results()
             history_str = ", ".join(data['history'])
