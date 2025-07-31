@@ -171,16 +171,37 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
     {performance_text}
     """
     try:
-        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "You are a world-class Baccarat analyst."},{"role": "user", "content": prompt}])
+        completion = client.chat.completions.create(
+            model="gpt-4o",
+            messages=[
+                {"role": "system", "content": "You are a world-class Baccarat analyst who provides reasoning before the final recommendation."},
+                {"role": "user", "content": prompt}
+            ]
+        )
         full_response = completion.choices[0].message.content
+        
+        recommendation_part = ""
         if "추천:" in full_response:
-            recommendation = full_response.split("추천:")[-1].strip()
-            return "Banker" if "Banker" in recommendation else "Player"
+            # "추천:" 뒤의 텍스트만 잘라내서 분석
+            recommendation_part = full_response.split("추천:")[-1]
         else:
-            return "Banker" if "Banker" in full_response else "Player"
+            # "추천:"이 없으면 전체 응답을 분석 대상으로 함
+            recommendation_part = full_response
+        
+        # 'Player' 또는 '플레이어' 단어가 명확히 있으면 플레이어 추천
+        if "Player" in recommendation_part or "플레이어" in recommendation_part:
+            return "Player"
+        # 'Banker' 또는 '뱅커' 단어가 명확히 있으면 뱅커 추천
+        elif "Banker" in recommendation_part or "뱅커" in recommendation_part:
+            return "Banker"
+        # 둘 다 없으면, 기본값으로 뱅커를 반환 (최소한의 안전장치)
+        else:
+            return "Banker"
+            
     except Exception as e:
         print(f"GPT-4 API Error: {e}")
-        return "Banker"
+        # 에러 발생 시 아무것도 반환하지 않음 (None)
+        return None
 
 # --- 캡션 및 키보드 생성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
