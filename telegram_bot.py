@@ -195,7 +195,7 @@ def build_caption_text(user_id, is_analyzing=False):
 3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
    게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
    (AI추천 평가하면 다음 분석 즉시 시작)
-4. 이후부터 3번 항목만 반복, "타이"시 클릭한다.
+4. 이후부터 3번 항목만 반복, "타이"시 클릭
 5. 새롭게 하기위해서는 "기록초기화" 클릭
 6. AI는 참고용이며 수익을 보장하지 않습니다. 
 """
@@ -204,7 +204,7 @@ def build_caption_text(user_id, is_analyzing=False):
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4o AI 분석으로 베팅에 참조하세요."); 
+    title = escape_markdown("ZENTRA가 개발한 Chet GPT-4o AI 분석으로 베팅에 참조하세요."); 
     subtitle = escape_markdown("결정과 결과의 책임은 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     
