@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Corrected Workflow Version)
+# telegram_bot.py (Final Workflow Version)
 
 import os
 import json
@@ -38,7 +38,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 user_locks = defaultdict(asyncio.Lock)
 
-# --- [DB] 및 기본 헬퍼 함수들 ---
+# --- [DB] 및 기본 헬퍼 함수들 (변경 없음) ---
 def setup_database():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -229,6 +229,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         log_activity(user_id, "button_click", action)
 
+        # 1. 수동 기록 (AI 추천이 없을 때)
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
@@ -236,10 +237,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['recommendation'] = None
             data['recommendation_info'] = None
             
+        # 2. 초기화, 페이지 넘김
         elif action == 'reset': 
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
         elif action == 'page_next': data['page'] += 1
         elif action == 'page_prev': data['page'] -= 1
+        
+        # 3. AI 분석 요청
         elif action == 'analyze':
             if not data['history']: return
             is_analyzing = True
@@ -252,6 +256,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
             is_analyzing = False
         
+        # 4. 피드백 및 자동 기록
         elif action == 'feedback_win':
             if data.get('recommendation_info'):
                 rec_info = data['recommendation_info']
@@ -293,6 +298,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 data['recommendation_info'] = None
             else: return
 
+        # 모든 액션 후 페이지 위치 재계산
         if action not in ['page_next', 'page_prev']:
             history = data['history']
             last_col = -1; last_winner = None
