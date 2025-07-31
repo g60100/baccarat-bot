@@ -113,9 +113,6 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
 
 # --- 이미지/캡션/키보드 생성 함수 ---
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
-# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
 def create_big_road_image(user_id):
     data = user_data.get(user_id, {})
     history = data.get('history', [])
@@ -200,7 +197,6 @@ def build_caption_text(user_id, is_analyzing=False):
 6. 최종 게임결과를 "승리 기록" 버튼을 클릭한다.
 7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
 * 위 내용을 순서대로 반복 기록한다.
-
 = 쳇GPT AI 분석 기준 =
 1. 전세계 최고전문가 입장에서 바카라를 분석한다.
 2. 과거와 현재의 데이터를 기반으로 분석한다.
@@ -208,7 +204,6 @@ def build_caption_text(user_id, is_analyzing=False):
 4. AI자신이 추천한 베팅의 "패"시 원인 분석한다.
 5. 동전을 던졌을때 나올 확률처럼 참조용이다.
 """
-
     rec_text = ""
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4 최신AI가 분석중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
@@ -220,11 +215,12 @@ def build_caption_text(user_id, is_analyzing=False):
     # [수정] 최종 메시지에 안내 문구 포함
     return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
+# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
     history = data.get('history', [])
-    cols_per_page = 30
+    cols_per_page = 20 # <-- 20칸으로 수정
     last_col = -1; last_winner = None
     for winner in history:
         if winner == 'T': continue
@@ -238,17 +234,17 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 기록 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ AI추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ AI추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -280,7 +276,6 @@ async def start(update: Update, context: CallbackContext) -> None:
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
 # telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
-
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
@@ -293,15 +288,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         action = query.data; data = user_data[user_id]; is_analyzing = False
         
-        log_activity(user_id, "button_click", action)
-
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
             data['history'].append(action); data['recommendation'] = None
             
             history = data['history']
-            cols_per_page = 30
+            cols_per_page = 20 # <-- 20칸으로 수정
             last_col = -1; last_winner = None
             for winner in history:
                 if winner == 'T': continue
@@ -323,27 +316,22 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             ai_performance_history = load_results(); history_str = ", ".join(data['history'])
             recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
             data['recommendation'] = recommendation; 
-            # 추천이 발생한 시점의 P/B 게임 인덱스를 저장
             data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
             is_analyzing = False
         
         elif action in ['feedback_win', 'feedback_loss']:
             if data.get('recommendation'):
                 outcome = 'win' if action == 'feedback_win' else 'loss'
-                log_activity(user_id, "feedback", f"{data['recommendation']}:{outcome}")
                 results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
                 
-                # --- 여기가 수정된 핵심 로직 ---
                 if outcome == 'win' and 'recommendation_info' in data:
                     rec_info = data['recommendation_info']
                     pb_history = [h for h in data['history'] if h != 'T']
                     if pb_history:
-                        # 추천이 이루어진 라운드는 다음 라운드이므로, 현재 P/B 기록 길이를 사용
-                        if rec_info['at_round'] == len(pb_history):
-                             # 적중한 P/B 기록의 인덱스를 저장
-                             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-                # --- 여기까지 ---
+                        last_winner = pb_history[-1]
+                        if rec_info['bet_on'] == last_winner and rec_info['at_round'] == len(pb_history):
+                             data.setdefault('correct_indices', []).append(rec_info['at_round'] - 1)
 
                 await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
                 data['recommendation'] = None
