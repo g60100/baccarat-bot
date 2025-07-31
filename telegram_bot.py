@@ -191,7 +191,7 @@ def build_caption_text(user_id, is_analyzing=False):
 7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
 * 위 내용을 순서대로 반복 기록한다.
 
-= ChetGPT-4 AI 분석 기준 =
+= Zentra ChetGPT-4 AI 분석 기준 =
 1. 전세계 최고전문가 입장에서 바카라를 분석한다.
 2. 과거와 현재의 데이터를 기반으로 분석한다.
 3. 현재 본인이 기록한 패턴을 참조해서 분석한다.
@@ -319,13 +319,17 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 if outcome == 'win':
                     rec_info = data['recommendation_info']
                     pb_history = [h for h in data['history'] if h != 'T']
-                    if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history):
-                         data.setdefault('correct_indices', []).append(len(pb_history) - 1)
+                    if pb_history:
+                        last_winner = pb_history[-1]
+                        # 추천은 다음 라운드에 대한 것이므로, 현재 P/B 기록 길이는 추천 시점+1 이어야 함
+                        if rec_info['bet_on'] == last_winner and rec_info['at_round'] + 1 == len(pb_history):
+                             # P/B 기록의 마지막 인덱스를 저장
+                             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
                 # --- 여기까지 ---
 
                 await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
                 data['recommendation'] = None
-                data['recommendation_info'] = None
+                data['recommendation_info'] = None # 피드백 후에는 추천 정보도 초기화
             else: 
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
