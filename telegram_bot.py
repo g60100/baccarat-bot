@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Workflow Version)
+# telegram_bot.py (Final Corrected Workflow Version)
 
 import os
 import json
@@ -38,7 +38,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 user_locks = defaultdict(asyncio.Lock)
 
-# --- [DB] 및 기본 헬퍼 함수들 ---
+# --- [DB] 및 기본 헬퍼 함수들 (변경 없음) ---
 def setup_database():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
@@ -54,10 +54,8 @@ def log_activity(user_id, action, details=""):
     try:
         cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)", (user_id, timestamp, action, details))
         conn.commit()
-    except Exception as e:
-        print(f"DB Log Error: {e}")
-    finally:
-        conn.close()
+    except Exception as e: print(f"DB Log Error: {e}")
+    finally: conn.close()
 
 def load_results():
     if not os.path.exists(RESULTS_LOG_FILE):
@@ -78,7 +76,6 @@ def escape_markdown(text: str) -> str:
     escape_chars = r'_*[]()~`>#+-.=|{}!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
 
-# --- 이미지 생성 함수 ---
 def create_big_road_image(user_id):
     data = user_data.get(user_id, {})
     history = data.get('history', [])
@@ -140,18 +137,17 @@ def create_big_road_image(user_id):
     image_path = "baccarat_road.png"; img.save(image_path)
     return image_path
 
-# --- GPT-4 분석 함수 ---
 def get_gpt4_recommendation(game_history, ai_performance_history):
-    performance_text = "아직 나의 추천 기록이 없습니다."
+    performance_text = "기록 없음."
     if ai_performance_history:
-        performance_text = "아래는 당신(AI)의 과거 추천 기록과 그 실제 결과입니다:\n"
-        for i, record in enumerate(ai_performance_history[-10:]):
+        performance_text = "과거 추천 기록:\n"
+        for i, record in enumerate(ai_performance_history[-5:]):
             outcome_text = '승리' if record.get('outcome') == 'win' else '패배'
-            performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
+            performance_text += f"{i+1}. 추천:{record.get('recommendation', 'N/A')}, 결과:{outcome_text}\n"
 
-    prompt = f"Analyze Baccarat history and your past performance. History: {game_history}. Your Performance: {performance_text}. Provide reasoning and then conclude with '추천:' followed by only 'Player' or 'Banker'."
+    prompt = f"Baccarat History: {game_history}. Your past performance: {performance_text}. Analyze both and recommend the next bet (Player or Banker). Conclude with '추천:' followed by only 'Player' or 'Banker'."
     try:
-        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "You are a world-class Baccarat analyst who self-corrects based on past performance."},{"role": "user", "content": prompt}])
+        completion = client.chat.completions.create(model="gpt-4o", messages=[{"role": "system", "content": "You are an expert Baccarat analyst who self-corrects based on past performance."},{"role": "user", "content": prompt}])
         full_response = completion.choices[0].message.content
         if "추천:" in full_response:
             recommendation = full_response.split("추천:")[-1].strip()
@@ -162,7 +158,6 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
         print(f"GPT-4 API Error: {e}")
         return "Banker"
 
-# --- 캡션 및 키보드 생성 함수 ---
 def build_caption_text(user_id, is_analyzing=False):
     data = user_data.get(user_id, {})
     player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
@@ -209,7 +204,7 @@ def build_keyboard(user_id):
         ])
     return InlineKeyboardMarkup(keyboard)
 
-# --- 텔레그램 명령어 및 버튼 처리 함수 (로직 수정) ---
+# --- 텔레그램 명령어 및 버튼 처리 함수 (로직 전면 수정) ---
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     username = update.message.from_user.username or update.message.from_user.first_name
@@ -234,6 +229,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         log_activity(user_id, "button_click", action)
 
+        # 1. 수동 기록 (AI 추천이 없을 때)
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
@@ -241,10 +237,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['recommendation'] = None
             data['recommendation_info'] = None
             
+        # 2. 초기화, 페이지 넘김
         elif action == 'reset': 
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
         elif action == 'page_next': data['page'] += 1
         elif action == 'page_prev': data['page'] -= 1
+        
+        # 3. AI 분석 요청
         elif action == 'analyze':
             if not data['history']: return
             is_analyzing = True
@@ -253,49 +252,54 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             
             ai_performance_history = load_results(); history_str = ", ".join(data['history'])
             recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
-            data['recommendation'] = recommendation; 
+            data['recommendation'] = recommendation
             data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
             is_analyzing = False
         
+        # 4. 피드백 및 자동 기록
         elif action == 'feedback_win':
             if data.get('recommendation_info'):
                 rec_info = data['recommendation_info']
-                pb_history = [h for h in data['history'] if h != 'T']
+                outcome = 'win'
+                actual_winner = rec_info['bet_on']
                 
-                # 마지막 기록이 추천과 일치하는지 확인
-                if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history) -1 :
-                    data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-                    await context.bot.answer_callback_query(query.id, text="피드백(승리)을 기록했습니다! 구슬이 채워집니다.")
-                else:
-                    await context.bot.answer_callback_query(query.id, text="마지막 기록이 AI 추천과 일치하지 않습니다.")
+                data['history'].append(actual_winner)
+                if actual_winner == 'P': data['player_wins'] += 1
+                else: data['banker_wins'] += 1
                 
-                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:win")
-                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": "win"})
+                pb_history_len = len([h for h in data['history'] if h != 'T'])
+                data.setdefault('correct_indices', []).append(pb_history_len - 1)
+                
+                log_activity(user_id, "feedback", f"{actual_winner}:{outcome}")
+                results = load_results(); results.append({"recommendation": actual_winner, "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-                
+
+                await context.bot.answer_callback_query(query.id, text=f"피드백(승리) 및 다음 결과({actual_winner})를 기록했습니다!")
                 data['recommendation'] = None
                 data['recommendation_info'] = None
-            else: 
-                await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-                return
-        
+            else: return
+
         elif action == 'feedback_loss':
             if data.get('recommendation_info'):
                 rec_info = data['recommendation_info']
+                outcome = 'loss'
+
+                actual_winner = 'P' if rec_info['bet_on'] == 'B' else 'B'
+                data['history'].append(actual_winner)
+                if actual_winner == 'P': data['player_wins'] += 1
+                else: data['banker_wins'] += 1
                 
-                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:loss")
-                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": "loss"})
+                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:{outcome}")
+                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-                
-                await context.bot.answer_callback_query(query.id, text="피드백(패배)을 학습했습니다. 실제 결과를 버튼으로 입력해주세요.")
+
+                await context.bot.answer_callback_query(query.id, text=f"피드백(패배) 및 실제 결과({actual_winner})를 기록했습니다.")
                 data['recommendation'] = None
                 data['recommendation_info'] = None
-            else: 
-                await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-                return
+            else: return
 
-        # 페이지 위치 재계산 및 화면 업데이트
-        if action in ['P', 'B', 'T']:
+        # 모든 액션 후 페이지 위치 재계산
+        if action not in ['page_next', 'page_prev']:
             history = data['history']
             last_col = -1; last_winner = None
             for winner in history:
