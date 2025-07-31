@@ -1,11 +1,9 @@
-# telegram_bot.py (Final Version with All Functions)
+# telegram_bot.py (Final Version with Guide)
 
 import os
 import json
 import asyncio
 import math
-import sqlite3
-import datetime
 from collections import defaultdict
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
@@ -25,7 +23,6 @@ user_locks = defaultdict(asyncio.Lock)
 
 # --- [DB] 데이터베이스 설정 함수 ---
 def setup_database():
-    """프로그램 시작 시 데이터베이스와 테이블을 생성합니다."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     cursor.execute('''
@@ -50,7 +47,6 @@ def setup_database():
 
 # --- [DB] 데이터베이스 기록 함수 ---
 def log_activity(user_id, action, details=""):
-    """사용자의 활동을 데이터베이스에 기록합니다."""
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
@@ -178,14 +174,37 @@ def build_caption_text(user_id, is_analyzing=False):
     player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
     
+    # --- [새로운 기능] 안내 문구 추가 ---
+    guide_text = """
+= Zentra 분석기 사용 순서 =
+1\. 최근 나온 배팅 결과를 승리 기록 버튼에 기록한다\.
+2\. 분석 후 베팅 추천 요청 버튼을 클릭한다\.
+3\. 👇AI 추천 참조👇아래 AI가 추천하는 베팅을 참조한다\.
+4\. 실제적으로 본인이 선택해서 게임에 베팅한다\.
+5\. 게임 결과 AI 추천대로 승리인지 패배인지 평가클릭한다\.
+6\. 최종 게임 결과를 승리 기록 버튼을 클릭한다\.
+7\. 분석 후 베팅 추천 요청 버튼을 클릭한다(2번)\.
+* 위 내용을 순서대로 반복 한다\.
+
+= 쳇GPT AI 분석 기준 =
+1\. 전세계 최고 전문가 입장에서 바카라를 분석한다\.
+2\. 과거와 현재의 데이터를 기반으로 분석한다\.
+3\. 현재 승리 기록 패턴을 참조해서 분석한다\.
+4\. AI자신이 추천한 베팅의 "패"시 원인 분석한다\.
+5\. 하지만 동전을 던졌을때 나올 확률처럼 참조용이다\.
+"""
+    # --- 여기까지 ---
+
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천을 참조하세요* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
+    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
-    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+    # [수정] 최종 메시지에 안내 문구 포함
+    return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
@@ -205,7 +224,7 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 기록 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
@@ -214,8 +233,8 @@ def build_keyboard(user_id):
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ AI 추천대로 승리 평가 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ AI 추천대로 패배 평가 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -294,7 +313,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         elif action in ['feedback_win', 'feedback_loss']:
             if data.get('recommendation'):
                 outcome = 'win' if action == 'feedback_win' else 'loss'
-                # Log feedback to both files
                 log_activity(user_id, "feedback", f"{data['recommendation']}:{outcome}")
                 results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
