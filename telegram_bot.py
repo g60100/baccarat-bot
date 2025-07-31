@@ -4,6 +4,8 @@ import os
 import json
 import asyncio
 import math
+import sqlite3      # <--- 빠져있던 부분
+import datetime   # <--- 빠져있던 부분
 from collections import defaultdict
 from openai import OpenAI
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, InputMediaPhoto
