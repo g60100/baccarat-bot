@@ -190,21 +190,21 @@ def build_caption_text(user_id, is_analyzing=False):
     
     guide_text = """
 = Zentra ChetGPT-4o AI 분석기 사용 순서 =
-1. 실제 게임결과를 '수동 기록' 클릭과 시작합니다.
-2. 1번 수동입력하면 AI가 자동으로 분석을 시작합니다.
-3. 실제 게임결과 AI추천이 맞으면 "AI추천승리"를 클릭
-   실제 게임결과 AI추천이 틀리면 "AI추천패비"를 클릭
-   (AI분석 평가를 하면 다음 분석을 즉시 시작한다.)
-4. 이후부터 3번 항목만 반복하며, 타이시 타이 클릭한다.
-5. 기록을 지우고 새롭게 하기위해서는 "기록초기화" 클릭
-6. Zentra AI는 참고용이며 수익을 보장하지 않습니다. 
+1. 실제 게임결과를 '수동 기록' 클릭과 시작
+2. 1번 수동입력하면 AI가 자동 분석 시작
+3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
+   게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
+   (AI추천 평가하면 다음 분석 즉시 시작)
+4. 이후부터 3번 항목만 반복, "타이"시 클릭한다.
+5. 새롭게 하기위해서는 "기록초기화" 클릭
+6. AI는 참고용이며 수익을 보장하지 않습니다. 
 """
 
     rec_text = ""
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한한 ChetGPT-4o AI 분석으로 베팅에 참조하세요."); 
+    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4o AI 분석으로 베팅에 참조하세요."); 
     subtitle = escape_markdown("결정과 결과의 책임은 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     
@@ -243,14 +243,14 @@ def build_keyboard(user_id):
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI 분석 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI분석 수동 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         # [수정] 문자열 바깥쪽을 작은따옴표로 변경하여 구문 오류 해결
         keyboard.append([
-            InlineKeyboardButton(f'✅ AI추천 "승"시 클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
-            InlineKeyboardButton(f'❌ AI추천 "패"시 클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
+            InlineKeyboardButton(f'✅AI추천"승"클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
+            InlineKeyboardButton(f'❌AI추천"패"클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
