@@ -181,7 +181,7 @@ def build_caption_text(user_id, is_analyzing=False):
     recommendation = data.get('recommendation', None)
     
     guide_text = """
-= Zentra 분석기 사용 순서 =
+= Zentra ChetGPT-4 AI 분석기 사용 순서 =
 1. 마지막 배팅결과를 "승리 기록" 버튼에 기록한다.
 2. "AI분석 후 베팅추천요청" 버튼을 클릭한다.
 3.👇AI추천참조👇AI가 추천하는 베팅을 참조한다.
@@ -191,7 +191,7 @@ def build_caption_text(user_id, is_analyzing=False):
 7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
 * 위 내용을 순서대로 반복 기록한다.
 
-= 쳇GPT AI 분석 기준 =
+= ChetGPT-4 AI 분석 기준 =
 1. 전세계 최고전문가 입장에서 바카라를 분석한다.
 2. 과거와 현재의 데이터를 기반으로 분석한다.
 3. 현재 본인이 기록한 패턴을 참조해서 분석한다.
@@ -200,10 +200,10 @@ def build_caption_text(user_id, is_analyzing=False):
 """
 
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4 AI가 분석중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
+    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4 AI 분석으로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
     subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
@@ -227,17 +227,17 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 승리 기록 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI분석 후 베팅추천요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ AI추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ AI추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
