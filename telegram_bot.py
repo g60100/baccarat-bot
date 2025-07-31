@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Verified Version - All features included)
+# telegram_bot.py (Final Logic Update)
 
 import os
 import json
@@ -30,9 +30,9 @@ from PIL import Image, ImageDraw, ImageFont
 # --- 설정 ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-RESULTS_LOG_FILE = 'results_log.json' 
-DB_FILE = 'baccarat_stats.db' 
-COLS_PER_PAGE = 20 # 페이지당 열 개수 설정
+RESULTS_LOG_FILE = 'results_log.json'
+DB_FILE = 'baccarat_stats.db'
+COLS_PER_PAGE = 20
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -281,7 +281,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         if action in ['P', 'B', 'T']:
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
-            data['history'].append(action); data['recommendation'] = None
+            data['history'].append(action); data['recommendation'] = None; data['recommendation_info'] = None
             
             history = data['history']
             last_col = -1; last_winner = None
@@ -308,25 +308,44 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
             is_analyzing = False
         
-        elif action in ['feedback_win', 'feedback_loss']:
+        elif action == 'feedback_win':
             if data.get('recommendation_info'):
-                outcome = 'win' if action == 'feedback_win' else 'loss'
                 rec_info = data['recommendation_info']
+                outcome = 'win'
+                actual_winner = rec_info['bet_on']
                 
-                actual_winner = rec_info['bet_on'] if outcome == 'win' else ('P' if rec_info['bet_on'] == 'B' else 'B')
+                # 1. 다음 결과 자동 기록
                 data['history'].append(actual_winner)
                 if actual_winner == 'P': data['player_wins'] += 1
                 else: data['banker_wins'] += 1
                 
+                # 2. 피드백 로그 저장
+                log_activity(user_id, "feedback", f"{actual_winner}:{outcome}")
+                results = load_results(); results.append({"recommendation": actual_winner, "outcome": outcome})
+                with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
+                
+                # 3. 적중 인덱스 기록
+                pb_history_len = len([h for h in data['history'] if h != 'T'])
+                data.setdefault('correct_indices', []).append(pb_history_len - 1)
+
+                await context.bot.answer_callback_query(query.id, text=f"피드백(승리) 및 다음 결과({actual_winner})를 기록했습니다!")
+                data['recommendation'] = None
+                data['recommendation_info'] = None
+            else: 
+                await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
+                return
+
+        elif action == 'feedback_loss':
+            if data.get('recommendation_info'):
+                rec_info = data['recommendation_info']
+                outcome = 'loss'
+                
+                # 1. 패배 기록만 로그로 남김 (빅로드 변경 없음)
                 log_activity(user_id, "feedback", f"{rec_info['bet_on']}:{outcome}")
                 results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-                
-                if outcome == 'win':
-                    pb_history_len = len([h for h in data['history'] if h != 'T'])
-                    data.setdefault('correct_indices', []).append(pb_history_len - 1)
 
-                await context.bot.answer_callback_query(query.id, text=f"피드백({outcome}) 및 다음 결과({actual_winner})를 기록했습니다!")
+                await context.bot.answer_callback_query(query.id, text=f"피드백(패배)을 학습했습니다. 실제 결과를 버튼으로 입력해주세요.")
                 data['recommendation'] = None
                 data['recommendation_info'] = None
             else: 
@@ -334,9 +353,13 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 return
 
         try:
-            image_path = create_big_road_image(user_id)
-            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
-            await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
+            # 피드백 패배 시에는 이미지/캡션 업데이트 없이 키보드만 업데이트
+            if action == 'feedback_loss':
+                await query.edit_message_reply_markup(reply_markup=build_keyboard(user_id))
+            else:
+                image_path = create_big_road_image(user_id)
+                media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
+                await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
         except Exception as e:
             if "Message is not modified" not in str(e):
                 print(f"메시지 수정 오류: {e}")
