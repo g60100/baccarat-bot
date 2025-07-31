@@ -30,8 +30,8 @@ from PIL import Image, ImageDraw, ImageFont
 # --- 설정 ---
 OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
-RESULTS_LOG_FILE = 'results_log.json' 
-DB_FILE = 'baccarat_stats.db' 
+RESULTS_LOG_FILE = 'results_log.json'
+DB_FILE = 'baccarat_stats.db'
 COLS_PER_PAGE = 20 # 페이지당 열 개수 설정
 
 client = OpenAI(api_key=OPENAI_API_KEY)
@@ -182,33 +182,25 @@ def build_caption_text(user_id, is_analyzing=False):
     
     guide_text = """
 = Zentra 분석기 사용 순서 =
-1. 마지막 배팅결과를 "승리 기록" 버튼에 기록한다.
-2. "AI분석 후 베팅추천요청" 버튼을 클릭한다.
-3.👇AI추천참조👇AI가 추천하는 베팅을 참조한다.
-4. 실제적으로 본인이 선택해서 게임에 베팅한다.
-5. 게임결과 AI추천대로 "승"/"패"인지 평가한다.
-6. 최종 게임결과를 "승리 기록" 버튼을 클릭한다.
-7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
-* 위 내용을 순서대로 반복 기록한다.
-
-= 쳇GPT AI 분석 기준 =
-1. 전세계 최고전문가 입장에서 바카라를 분석한다.
-2. 과거와 현재의 데이터를 기반으로 분석한다.
-3. 현재 본인이 기록한 패턴을 참조해서 분석한다.
-4. AI자신이 추천한 베팅의 "패"시 원인 분석한다.
-5. 동전을 던졌을때 나올 확률처럼 참조용이다.
+1. 실제 게임 결과를 '수동 기록' 버튼으로 입력합니다.
+ (입력 즉시 AI가 다음 게임을 분석/추천합니다)
+2. AI의 추천을 참고하여 실제 게임에 베팅합니다.
+3. 게임 결과에 따라 'AI 추천 승리/패배' 버튼으로 피드백을 기록합니다.
+ (피드백 기록 시, 결과가 빅로드에 새로 그려집니다)
+4. 위 과정을 반복합니다.
 """
 
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4o가 다음 수를 분석 중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
-    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
-    player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
+    title = escape_markdown("ZENTRA AI 분석기는 베팅 참조용입니다. 결정과 결과의 책임은 본인에게 있습니다."); 
+    subtitle = escape_markdown("아래 버튼을 눌러 게임 결과를 기록하세요.")
+    player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     
     return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
+# [수정됨] 키보드 버튼 텍스트 및 로직 수정
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
@@ -226,18 +218,18 @@ def build_keyboard(user_id):
     if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     keyboard = [
-        [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🔵 플레이어 (수동 기록)", callback_data='P'), InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
+        [InlineKeyboardButton("🟢 타이 (수동 기록)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 AI 분석 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ AI 추천 승리 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ AI 추천 패배 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -252,80 +244,98 @@ async def start(update: Update, context: CallbackContext) -> None:
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
+# [수정됨] 요청사항을 반영한 새로운 버튼 콜백 로직
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     lock = user_locks[user_id]
-    if lock.locked(): await query.answer("처리 중입니다..."); return
+
+    if lock.locked():
+        await query.answer("처리 중입니다. 이전 요청이 완료될 때까지 기다려주세요.")
+        return
+        
     async with lock:
         await query.answer()
-        if user_id not in user_data: 
+        if user_id not in user_data:
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
         
-        action = query.data; data = user_data[user_id]; is_analyzing = False
+        data = user_data[user_id]
+        action = query.data
         
         log_activity(user_id, "button_click", action)
 
+        should_analyze = False
+        update_ui_only = False
+
         if action in ['P', 'B', 'T']:
+            # 1. 수동 기록: 사용자가 실제 결과를 입력하면 AI가 자동 분석 시작
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
             data['history'].append(action)
             data['recommendation'] = None
             data['recommendation_info'] = None
-            
-        elif action == 'reset': 
+            should_analyze = True
+
+        elif action == 'reset':
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
-        elif action == 'page_next': data['page'] += 1
-        elif action == 'page_prev': data['page'] -= 1
+            update_ui_only = True
+
+        elif action in ['page_next', 'page_prev']:
+            if action == 'page_next': data['page'] += 1
+            else: data['page'] = max(0, data['page'] - 1)
+            update_ui_only = True
+
         elif action == 'analyze':
-            if not data['history']: return
-            is_analyzing = True
-            image_path = create_big_road_image(user_id)
-            await query.edit_message_media(media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2), reply_markup=build_keyboard(user_id))
-            
-            ai_performance_history = load_results(); history_str = ", ".join(data['history'])
-            recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
-            data['recommendation'] = recommendation
-            data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
-            is_analyzing = False
-        
+            # 2. 분석 버튼: 수동으로 AI 분석 요청
+            if not data['history']:
+                await context.bot.answer_callback_query(query.id, text="기록이 없어 분석할 수 없습니다.")
+                return
+            should_analyze = True
+
         elif action == 'feedback_win':
-            if data.get('recommendation_info'):
-                rec_info = data['recommendation_info']
-                pb_history = [h for h in data['history'] if h != 'T']
-                
-                if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history) - 1 :
-                    data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-                    await context.bot.answer_callback_query(query.id, text="피드백(승리)을 기록했습니다! 구슬이 채워집니다.")
-                else:
-                    await context.bot.answer_callback_query(query.id, text="마지막 기록이 AI 추천과 일치하지 않습니다.")
-                
-                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:win")
-                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": "win"})
-                with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-                
-                data['recommendation'] = None
-                data['recommendation_info'] = None
-            else: 
+            # 3. 1) 승리 피드백: AI 추천이 맞았을 경우
+            rec_info = data.get('recommendation_info')
+            if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
 
+            recommendation = rec_info['bet_on']
+            data['history'].append(recommendation)
+            if recommendation == 'P': data['player_wins'] += 1
+            elif recommendation == 'B': data['banker_wins'] += 1
+            
+            pb_history = [h for h in data['history'] if h != 'T']
+            data.setdefault('correct_indices', []).append(len(pb_history) - 1)
+
+            log_activity(user_id, "feedback", f"{recommendation}:win")
+            results = load_results(); results.append({"recommendation": recommendation, "outcome": "win"})
+            with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
+
+            await context.bot.answer_callback_query(query.id, text=f"피드백(승리): AI 추천({recommendation})을 히스토리에 추가합니다.")
+            should_analyze = True
+            
         elif action == 'feedback_loss':
-            if data.get('recommendation_info'):
-                rec_info = data['recommendation_info']
-                
-                log_activity(user_id, "feedback", f"{rec_info['bet_on']}:loss")
-                results = load_results(); results.append({"recommendation": rec_info['bet_on'], "outcome": "loss"})
-                with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-                
-                await context.bot.answer_callback_query(query.id, text="피드백(패배)을 학습했습니다. 실제 결과를 버튼으로 입력해주세요.")
-                data['recommendation'] = None
-                data['recommendation_info'] = None
-            else: 
+            # 3. 2) 패배 피드백: AI 추천이 틀렸을 경우
+            rec_info = data.get('recommendation_info')
+            if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
+            
+            recommendation = rec_info['bet_on']
+            opposite_result = 'P' if recommendation == 'B' else 'B'
+            data['history'].append(opposite_result)
+            if opposite_result == 'P': data['player_wins'] += 1
+            elif opposite_result == 'B': data['banker_wins'] += 1
 
-        if action not in ['page_next', 'page_prev']:
+            log_activity(user_id, "feedback", f"{recommendation}:loss")
+            results = load_results(); results.append({"recommendation": recommendation, "outcome": "loss"})
+            with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
+
+            await context.bot.answer_callback_query(query.id, text=f"피드백(패배): 반대 결과({opposite_result})를 히스토리에 추가합니다.")
+            should_analyze = True
+
+        # --- 통합 분석 및 UI 업데이트 로직 ---
+        if should_analyze:
             history = data['history']
             last_col = -1; last_winner = None
             for winner in history:
@@ -335,9 +345,22 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
             data['page'] = max(0, total_pages - 1)
 
+            image_path = create_big_road_image(user_id)
+            await query.edit_message_media(
+                media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2),
+                reply_markup=build_keyboard(user_id)
+            )
+
+            ai_performance_history = load_results()
+            history_str = ", ".join(data['history'])
+            new_recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
+            data['recommendation'] = new_recommendation
+            data['recommendation_info'] = {'bet_on': new_recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
+
+        # UI 최종 업데이트
         try:
             image_path = create_big_road_image(user_id)
-            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=is_analyzing), parse_mode=ParseMode.MARKDOWN_V2)
+            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=(should_analyze)), parse_mode=ParseMode.MARKDOWN_V2)
             await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
         except Exception as e:
             if "Message is not modified" not in str(e):
