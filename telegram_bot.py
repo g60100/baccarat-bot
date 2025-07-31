@@ -279,6 +279,8 @@ async def start(update: Update, context: CallbackContext) -> None:
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(photo=open(image_path, 'rb'), caption=build_caption_text(user_id), reply_markup=build_keyboard(user_id), parse_mode=ParseMode.MARKDOWN_V2)
 
+# telegram_bot.py 파일에서 이 함수를 찾아 교체하세요.
+
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
@@ -321,6 +323,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             ai_performance_history = load_results(); history_str = ", ".join(data['history'])
             recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
             data['recommendation'] = recommendation; 
+            # 추천이 발생한 시점의 P/B 게임 인덱스를 저장
             data['recommendation_info'] = {'bet_on': recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
             is_analyzing = False
         
@@ -331,13 +334,16 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 results = load_results(); results.append({"recommendation": data['recommendation'], "outcome": outcome})
                 with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
                 
+                # --- 여기가 수정된 핵심 로직 ---
                 if outcome == 'win' and 'recommendation_info' in data:
                     rec_info = data['recommendation_info']
                     pb_history = [h for h in data['history'] if h != 'T']
                     if pb_history:
-                        last_winner = pb_history[-1]
-                        if rec_info['bet_on'] == last_winner and rec_info['at_round'] == len(pb_history):
-                             data.setdefault('correct_indices', []).append(rec_info['at_round'] - 1)
+                        # 추천이 이루어진 라운드는 다음 라운드이므로, 현재 P/B 기록 길이를 사용
+                        if rec_info['at_round'] == len(pb_history):
+                             # 적중한 P/B 기록의 인덱스를 저장
+                             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
+                # --- 여기까지 ---
 
                 await context.bot.answer_callback_query(query.id, text=f"피드백({outcome})을 학습했습니다!")
                 data['recommendation'] = None
