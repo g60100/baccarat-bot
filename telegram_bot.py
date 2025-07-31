@@ -1,4 +1,11 @@
-# telegram_bot.py (Final Version with Guide)
+# 이후 관리자 페이지를 위해서 1단계 데이터베이스 정리 / 2단계 텔레그램 봇에 데이터 로깅 기능 추가 완성
+# 3단계 Flask로 관리자 웹페이지 만들기 / 4단계: 관리자 페이지 화면(HTML) 만들기 / 단계: 서버에 함께 배포하기 추가 예
+# 옆으로 행을 20칸이 넘어가면 다음 버튼 생성
+# AI가 분석해 준 베팅이 맞으면 구슬 안쪽을 채워서 표시
+# 젠트라 사용 순서
+# 글자 수
+ 
+# telegram_bot.py (Final Verified Version)
 
 import os
 import json
@@ -18,6 +25,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 RESULTS_LOG_FILE = 'results_log.json' 
 DB_FILE = 'baccarat_stats.db' 
+COLS_PER_PAGE = 20 # 페이지당 열 개수
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -27,34 +35,17 @@ user_locks = defaultdict(asyncio.Lock)
 def setup_database():
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS users (
-            user_id INTEGER PRIMARY KEY,
-            username TEXT,
-            first_seen TEXT,
-            last_seen TEXT
-        )
-    ''')
-    cursor.execute('''
-        CREATE TABLE IF NOT EXISTS activity (
-            activity_id INTEGER PRIMARY KEY AUTOINCREMENT,
-            user_id INTEGER,
-            timestamp TEXT,
-            action TEXT,
-            details TEXT
-        )
-    ''')
+    cursor.execute('CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_seen TEXT, last_seen TEXT)')
+    cursor.execute('CREATE TABLE IF NOT EXISTS activity (activity_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, timestamp TEXT, action TEXT, details TEXT)')
     conn.commit()
     conn.close()
 
-# --- [DB] 데이터베이스 기록 함수 ---
 def log_activity(user_id, action, details=""):
     conn = sqlite3.connect(DB_FILE)
     cursor = conn.cursor()
     timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     try:
-        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)",
-                       (user_id, timestamp, action, details))
+        cursor.execute("INSERT INTO activity (user_id, timestamp, action, details) VALUES (?, ?, ?, ?)", (user_id, timestamp, action, details))
         conn.commit()
     except Exception as e:
         print(f"DB Log Error: {e}")
@@ -89,7 +80,7 @@ def create_big_road_image(user_id):
     page = data.get('page', 0)
     correct_indices = data.get('correct_indices', [])
     
-    cell_size = 22; rows, cols_per_page = 6, 30
+    cell_size = 22; rows = 6
     full_grid_cols = 120
     full_grid = [[''] * full_grid_cols for _ in range(rows)]
     last_positions = {}
@@ -113,20 +104,20 @@ def create_big_road_image(user_id):
                 last_positions[winner] = (row, col)
             last_winner = winner
     
-    start_col = page * cols_per_page; end_col = start_col + cols_per_page
+    start_col = page * COLS_PER_PAGE; end_col = start_col + COLS_PER_PAGE
     page_grid = [row[start_col:end_col] for row in full_grid]
-    top_padding = 30; width = cols_per_page * cell_size; height = rows * cell_size + top_padding
+    top_padding = 30; width = COLS_PER_PAGE * cell_size; height = rows * cell_size + top_padding
     img = Image.new('RGB', (width, height), color='#f4f6f9')
     draw = ImageDraw.Draw(img)
     try: font = ImageFont.truetype("arial.ttf", 16)
     except IOError: font = ImageFont.load_default()
     
     total_cols_needed = max(col + 1, 1) if 'col' in locals() else 1
-    total_pages = math.ceil(total_cols_needed / cols_per_page) if cols_per_page > 0 else 1
+    total_pages = math.ceil(total_cols_needed / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
     draw.text((10, 5), f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})", fill="black", font=font)
     
     for r in range(rows):
-        for c in range(cols_per_page):
+        for c in range(COLS_PER_PAGE):
             x1, y1 = c * cell_size, r * cell_size + top_padding
             x2, y2 = (c + 1) * cell_size, (r + 1) * cell_size + top_padding
             draw.rectangle([(x1, y1), (x2, y2)], outline='lightgray')
@@ -202,10 +193,10 @@ def build_caption_text(user_id, is_analyzing=False):
 """
 
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('쳇GPT-4가 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA가 개발한 AI 분석으으로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
     subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
@@ -215,13 +206,13 @@ def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get('page', 0)
     history = data.get('history', [])
-    cols_per_page = 20  # <-- 20칸으로 수정
+    
     last_col = -1; last_winner = None
     for winner in history:
         if winner == 'T': continue
         if winner != last_winner: last_col +=1
         last_winner = winner
-    total_pages = math.ceil((last_col + 1) / cols_per_page) if cols_per_page > 0 else 0
+    total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
     
     page_buttons = []
     if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
@@ -229,17 +220,17 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 승리 기록", callback_data='P'), InlineKeyboardButton("🔴 뱅커 승리 기록", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 기록 (Tie)", callback_data='T')]
+        [InlineKeyboardButton("🟢 타이 (Tie)", callback_data='T')]
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI분석 후 베팅추천요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 분석 후 베팅 추천 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ AI추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ AI추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ 추천대로 승리 횟수 ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ 추천대로 패배 횟수 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -286,13 +277,12 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['history'].append(action); data['recommendation'] = None
             
             history = data['history']
-            cols_per_page = 20 # <-- 20칸으로 수정
             last_col = -1; last_winner = None
             for winner in history:
                 if winner == 'T': continue
                 if winner != last_winner: last_col +=1
                 last_winner = winner
-            total_pages = math.ceil((last_col + 1) / cols_per_page) if cols_per_page > 0 else 0
+            total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
             data['page'] = max(0, total_pages - 1)
 
         elif action == 'reset': 
