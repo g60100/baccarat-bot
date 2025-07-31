@@ -190,20 +190,22 @@ def build_caption_text(user_id, is_analyzing=False):
     
     guide_text = """
 = Zentra ChetGPT-4o AI 분석기 사용 순서 =
-1. 실제 게임 결과를 '수동 기록' 버튼으로 입력합니다.
- (입력 즉시 AI가 다음 게임을 분석/추천합니다)
-2. AI의 추천을 참고하여 실제 게임에 베팅합니다.
-3. 게임 결과에 따라 'AI 추천 승리/패배' 버튼으로 피드백을 기록합니다.
- (피드백 기록 시, 결과가 빅로드에 새로 그려집니다)
-4. 위 과정을 반복합니다.
+1. 실제 게임결과를 '수동 기록' 클릭과 시작합니다.
+2. 1번 수동입력하면 AI가 자동으로 분석을 시작합니다.
+3. 실제 게임결과 AI추천이 맞으면 "AI추천승리"를 클릭
+   실제 게임결과 AI추천이 틀리면 "AI추천패비"를 클릭
+   (AI분석 평가를 하면 다음 분석을 즉시 시작한다.)
+4. 이후부터 3번 항목만 반복하며, 타이시 타이 클릭한다.
+5. 기록을 지우고 새롭게 하기위해서는 "기록초기화" 클릭
+6. Zentra AI는 참고용이며 수익을 보장하지 않습니다. 
 """
 
     rec_text = ""
-    if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4o가 다음 수를 분석 중입니다...')}_"
-    elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
+    if is_analyzing: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
+    elif recommendation: rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
     
-    title = escape_markdown("ZENTRA AI 분석기는 베팅 참조용입니다. 결정과 결과의 책임은 본인에게 있습니다."); 
-    subtitle = escape_markdown("아래 버튼을 눌러 게임 결과를 기록하세요.")
+    title = escape_markdown("ZENTRA가 개발한한 ChetGPT-4o AI 분석으로 베팅에 참조하세요."); 
+    subtitle = escape_markdown("결정과 결과의 책임은 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     
     return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
@@ -232,8 +234,8 @@ def build_keyboard(user_id):
     last_col, total_pages = _get_page_info(history)
     
     page_buttons = []
-    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
-    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+    if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전 이동", callback_data='page_prev'))
+    if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 이동 ➡️", callback_data='page_next'))
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어 (수동 기록)", callback_data='P'), InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
@@ -241,13 +243,13 @@ def build_keyboard(user_id):
     ]
     if page_buttons:
         keyboard.append(page_buttons)
-    keyboard.append([InlineKeyboardButton("🔍 AI 분석 요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
+    keyboard.append([InlineKeyboardButton("🔍 ChetGPT-4o AI 분석수동요청", callback_data='analyze'), InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')])
     
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats()
         keyboard.append([
-            InlineKeyboardButton(f"✅ AI 추천 승리 ({feedback_stats['win']})", callback_data='feedback_win'),
-            InlineKeyboardButton(f"❌ AI 추천 패배 ({feedback_stats['loss']})", callback_data='feedback_loss')
+            InlineKeyboardButton(f"✅ AI추천 "승"시 클릭  ({feedback_stats['win']})", callback_data='feedback_win'),
+            InlineKeyboardButton(f"❌ AI추천 "패"시 클릭 ({feedback_stats['loss']})", callback_data='feedback_loss')
         ])
     return InlineKeyboardMarkup(keyboard)
 
