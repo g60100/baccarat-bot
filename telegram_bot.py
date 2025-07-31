@@ -286,7 +286,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data['history'].append(action); data['recommendation'] = None
             
             history = data['history']
-            cols_per_page = 30
+            cols_per_page = 20 # <-- 20칸으로 수정
             last_col = -1; last_winner = None
             for winner in history:
                 if winner == 'T': continue
