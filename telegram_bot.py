@@ -251,11 +251,11 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
     lock = user_locks[user_id]
 
     if lock.locked():
-        await query.answer("처리 중입니다. 이전 요청이 완료될 때까지 기다려주세요.")
+        await query.answer("처리 중입니다...")
         return
         
     async with lock:
-        await query.answer()
+        await query.answer() # 사용자의 버튼 클릭에 즉시 응답
         if user_id not in user_data:
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
         
@@ -264,107 +264,106 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         
         log_activity(user_id, "button_click", action)
 
-        should_analyze = False
-        update_ui_only = False
+        # 상태 변경이 있는지 확인하는 플래그
+        state_changed = False
+
+        # --- 각 액션에 따른 로직 처리 ---
 
         if action in ['P', 'B', 'T']:
-            # 1. 수동 기록: 사용자가 실제 결과를 입력하면 AI가 자동 분석 시작
             if action == 'P': data['player_wins'] += 1
             elif action == 'B': data['banker_wins'] += 1
             data['history'].append(action)
             data['recommendation'] = None
-            data['recommendation_info'] = None
-            should_analyze = True
+            state_changed = True
 
         elif action == 'reset':
             user_data[user_id] = {'player_wins': 0, 'banker_wins': 0, 'history': [], 'recommendation': None, 'page': 0, 'correct_indices': []}
-            update_ui_only = True
+            state_changed = True
 
         elif action in ['page_next', 'page_prev']:
+            current_page = data['page']
             if action == 'page_next': data['page'] += 1
             else: data['page'] = max(0, data['page'] - 1)
-            update_ui_only = True
+            if current_page != data['page']: # 페이지가 실제로 변경된 경우에만 업데이트
+                 state_changed = True
 
         elif action == 'analyze':
-            # 2. 분석 버튼: 수동으로 AI 분석 요청
             if not data['history']:
                 await context.bot.answer_callback_query(query.id, text="기록이 없어 분석할 수 없습니다.")
-                return
-            should_analyze = True
+                return # 변경사항 없으므로 종료
+            state_changed = True
 
-        elif action == 'feedback_win':
-            # 3. 1) 승리 피드백: AI 추천이 맞았을 경우
+        elif action == 'feedback_win' or action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-                return
-
-            recommendation = rec_info['bet_on']
-            data['history'].append(recommendation)
-            if recommendation == 'P': data['player_wins'] += 1
-            elif recommendation == 'B': data['banker_wins'] += 1
-            
-            pb_history = [h for h in data['history'] if h != 'T']
-            data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-
-            log_activity(user_id, "feedback", f"{recommendation}:win")
-            results = load_results(); results.append({"recommendation": recommendation, "outcome": "win"})
-            with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
-
-            await context.bot.answer_callback_query(query.id, text=f"피드백(승리): AI 추천({recommendation})을 히스토리에 추가합니다.")
-            should_analyze = True
-            
-        elif action == 'feedback_loss':
-            # 3. 2) 패배 피드백: AI 추천이 틀렸을 경우
-            rec_info = data.get('recommendation_info')
-            if not rec_info:
-                await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-                return
+                return # 변경사항 없으므로 종료
             
             recommendation = rec_info['bet_on']
-            opposite_result = 'P' if recommendation == 'B' else 'B'
-            data['history'].append(opposite_result)
-            if opposite_result == 'P': data['player_wins'] += 1
-            elif opposite_result == 'B': data['banker_wins'] += 1
+            outcome = "win"
+            
+            if action == 'feedback_win':
+                result_to_add = recommendation
+                # AI 예측 성공 시, correct_indices에 추가
+                pb_history = [h for h in data['history'] if h != 'T']
+                data.setdefault('correct_indices', []).append(len(pb_history)) # 기록 추가 전이므로 +1 안함
+            else: # feedback_loss
+                result_to_add = 'P' if recommendation == 'B' else 'B'
+                outcome = "loss"
 
-            log_activity(user_id, "feedback", f"{recommendation}:loss")
-            results = load_results(); results.append({"recommendation": recommendation, "outcome": "loss"})
+            data['history'].append(result_to_add)
+            if result_to_add == 'P': data['player_wins'] += 1
+            else: data['banker_wins'] += 1
+
+            # 피드백 로그 기록
+            results = load_results()
+            results.append({"recommendation": recommendation, "outcome": outcome})
             with open(RESULTS_LOG_FILE, 'w') as f: json.dump(results, f, indent=2)
+            state_changed = True
 
-            await context.bot.answer_callback_query(query.id, text=f"피드백(패배): 반대 결과({opposite_result})를 히스토리에 추가합니다.")
-            should_analyze = True
 
-        # --- 통합 분석 및 UI 업데이트 로직 ---
-        if should_analyze:
-            history = data['history']
-            last_col = -1; last_winner = None
-            for winner in history:
-                if winner == 'T': continue
-                if winner != last_winner: last_col +=1
-                last_winner = winner
-            total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
-            data['page'] = max(0, total_pages - 1)
+        # --- 상태 변경이 있었을 경우에만 UI 업데이트 및 AI 분석 실행 ---
+        if not state_changed:
+            return # 아무 변화 없으면 여기서 함수 종료
 
+        try:
+            # AI 분석이 필요한 경우 (수동기록, 피드백, 분석버튼)
+            if action in ['P', 'B', 'T', 'analyze', 'feedback_win', 'feedback_loss']:
+                # 1. 마지막 결과가 보이도록 페이지 조정
+                history = data['history']
+                last_col = -1
+                last_winner = None
+                for winner in history:
+                    if winner == 'T': continue
+                    if winner != last_winner: last_col +=1
+                    last_winner = winner
+                total_pages = math.ceil((last_col + 1) / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 0
+                data['page'] = max(0, total_pages - 1)
+
+                # 2. "분석 중" 상태로 UI 업데이트
+                image_path = create_big_road_image(user_id)
+                await query.edit_message_media(
+                    media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2),
+                    reply_markup=build_keyboard(user_id)
+                )
+
+                # 3. GPT-4 분석 실행
+                ai_performance_history = load_results()
+                history_str = ", ".join(data['history'])
+                new_recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
+                data['recommendation'] = new_recommendation
+                data['recommendation_info'] = {'bet_on': new_recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
+
+            # 4. 최종 결과(새 추천 포함) 또는 단순 UI 변경(페이지, 리셋) 업데이트
             image_path = create_big_road_image(user_id)
             await query.edit_message_media(
-                media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=True), parse_mode=ParseMode.MARKDOWN_V2),
+                media=InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=False), parse_mode=ParseMode.MARKDOWN_V2),
                 reply_markup=build_keyboard(user_id)
             )
 
-            ai_performance_history = load_results()
-            history_str = ", ".join(data['history'])
-            new_recommendation = get_gpt4_recommendation(history_str, ai_performance_history)
-            data['recommendation'] = new_recommendation
-            data['recommendation_info'] = {'bet_on': new_recommendation, 'at_round': len([h for h in data['history'] if h != 'T'])}
-
-        # UI 최종 업데이트
-        try:
-            image_path = create_big_road_image(user_id)
-            media = InputMediaPhoto(media=open(image_path, 'rb'), caption=build_caption_text(user_id, is_analyzing=(should_analyze)), parse_mode=ParseMode.MARKDOWN_V2)
-            await query.edit_message_media(media=media, reply_markup=build_keyboard(user_id))
         except Exception as e:
             if "Message is not modified" not in str(e):
-                print(f"메시지 수정 오류: {e}")
+                print(f"메시지 수정 중 예상치 못한 오류 발생: {e}")
 
 # --- 봇 실행 메인 함수 ---
 def main() -> None:
