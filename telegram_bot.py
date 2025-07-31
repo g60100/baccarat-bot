@@ -12,7 +12,7 @@
 # 오류 및 안정성: ✅ 점검 완료
 # 최종 서비스 본(25년7월31일 최종수정)
  
-# telegram_bot.py (Final Verified Version)
+# telegram_bot.py (Final Verified Version - All features included)
 
 import os
 import json
@@ -32,7 +32,7 @@ OPENAI_API_KEY = os.environ.get("OPENAI_API_KEY")
 TELEGRAM_BOT_TOKEN = os.environ.get("TELEGRAM_BOT_TOKEN")
 RESULTS_LOG_FILE = 'results_log.json' 
 DB_FILE = 'baccarat_stats.db' 
-COLS_PER_PAGE = 20
+COLS_PER_PAGE = 20 # 페이지당 열 개수 설정
 
 client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
@@ -180,14 +180,34 @@ def build_caption_text(user_id, is_analyzing=False):
     player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
     recommendation = data.get('recommendation', None)
     
+    guide_text = """
+= Zentra 분석기 사용 순서 =
+1. 마지막 배팅결과를 "승리 기록" 버튼에 기록한다.
+2. "AI분석 후 베팅추천요청" 버튼을 클릭한다.
+3.👇AI추천참조👇AI가 추천하는 베팅을 참조한다.
+4. 실제적으로 본인이 선택해서 게임에 베팅한다.
+5. 게임결과 AI추천대로 "승"/"패"인지 평가한다.
+6. 최종 게임결과를 "승리 기록" 버튼을 클릭한다.
+7. 분석 후 "베팅추천요청"버튼을 클릭한다.(2번)
+* 위 내용을 순서대로 반복 기록한다.
+
+= 쳇GPT AI 분석 기준 =
+1. 전세계 최고전문가 입장에서 바카라를 분석한다.
+2. 과거와 현재의 데이터를 기반으로 분석한다.
+3. 현재 본인이 기록한 패턴을 참조해서 분석한다.
+4. AI자신이 추천한 베팅의 "패"시 원인 분석한다.
+5. 동전을 던졌을때 나올 확률처럼 참조용이다.
+"""
+
     rec_text = ""
     if is_analyzing: rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('GPT-4가 분석 중입니다...')}_"
     elif recommendation: rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅하세요.')}*"
     
-    title = escape_markdown("ZENTRA AI 분석"); subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
+    title = escape_markdown("ZENTRA가 개발한 AI 분석기로 베팅에 참조하세요. 결정은 본인이 하며, 결정의 결과도 본인에게 있습니다."); 
+    subtitle = escape_markdown("승리한 쪽의 버튼을 눌러 기록을 누적하세요.")
     player_title, banker_title = escape_markdown("플레이어 횟수"), escape_markdown("뱅커 횟수")
     
-    return f"*{title}*\n{subtitle}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
+    return f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}"
 
 def build_keyboard(user_id):
     data = user_data.get(user_id, {})
@@ -274,7 +294,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 rec_info = data['recommendation_info']
                 pb_history = [h for h in data['history'] if h != 'T']
                 
-                if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history) -1 :
+                if pb_history and rec_info['bet_on'] == pb_history[-1] and rec_info['at_round'] == len(pb_history) - 1 :
                     data.setdefault('correct_indices', []).append(len(pb_history) - 1)
                     await context.bot.answer_callback_query(query.id, text="피드백(승리)을 기록했습니다! 구슬이 채워집니다.")
                 else:
