@@ -252,17 +252,17 @@ def build_caption_text(user_id, is_analyzing=False):
 """
     rec_text = ""
     if is_analyzing:
-        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 분석중입니다...')}_"
+        rec_text = f"\n\n👇 *ChetGPT-4o AI분석 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 분석중입니다...')}_"
     elif recommendation:
-        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
-    title = escape_markdown("ZENTRA가 개발한 Chet GPT-4o AI 분석으로 베팅에 참조하세요.")
+        rec_text = f"\n\n👇 *ChetGPT-4o AI분석 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
+    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4o AI 분석으로 베팅에 참조하세요.")
     subtitle = escape_markdown("베팅의 결정과 베팅의 결과는 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     win_count = feedback_stats.get('win', 0)
     loss_count = feedback_stats.get('loss', 0)
     return (f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n"
             f"*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}\n\n"
-            f"✅ AI추천\"승\" 클릭: {win_count} ┃ ❌ AI추천\"패\" 클릭: {loss_count}")
+            f"✅ AI추천\ "승\" 클릭: {win_count} ┃ ❌ AI추천\ "패\" 클릭: {loss_count}")
 
 # --- 히스토리/페이지 정보 ---
 def _get_page_info(history):
@@ -501,5 +501,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
-
