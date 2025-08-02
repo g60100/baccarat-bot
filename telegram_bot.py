@@ -372,27 +372,17 @@ async def start(update: Update, context: CallbackContext) -> None:
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
+    await query.answer()
+
     lock = user_locks[user_id]
-
-    try:
-        await query.answer()
-    except Exception as e:
-        print(f"query.answer() error: {e}")
-
     if lock.locked():
-        # 이미 처리 중일 때는 사용자에게 알리지 않고 조용히 요청을 무시
         return
 
     async with lock:
         if user_id not in user_data:
             user_data[user_id] = {
-                "player_wins": 0,
-                "banker_wins": 0,
-                "history": [],
-                "recommendation": None,
-                "page": 0,
-                "correct_indices": [],
-                "auto_analysis_enabled": False,
+                "player_wins": 0, "banker_wins": 0, "history": [], "recommendation": None,
+                "page": 0, "correct_indices": [], "auto_analysis_enabled": True,
             }
 
         data = user_data[user_id]
@@ -400,101 +390,64 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         log_activity(user_id, "button_click", action)
 
         should_analyze = False
-        update_ui_only = False
 
+        # 수동 기록 (P, B, T)
         if action in ["P", "B", "T"]:
             data["history"].append(action)
-            if action == "P":
-                data["player_wins"] += 1
-            elif action == "B":
-                data["banker_wins"] += 1
+            if action == "P": data["player_wins"] += 1
+            elif action == "B": data["banker_wins"] += 1
             data["recommendation"] = None
-            data["recommendation_info"] = None
-            
-            # 자동분석이 켜져 있을 때만 분석 실행
-            if action in ["P", "B"] and data.get("auto_analysis_enabled", False):
+            if action in ["P", "B"] and data.get("auto_analysis_enabled", True):
                 should_analyze = True
-            else:
-                update_ui_only = True
-
-        elif action == "reset":
-            user_data[user_id] = {
-                "player_wins": 0,
-                "banker_wins": 0,
-                "history": [],
-                "recommendation": None,
-                "page": 0,
-                "correct_indices": [],
-                "auto_analysis_enabled": False,
-            }
-            log_reset(user_id)
-            update_ui_only = True
-
-        elif action in ["page_next", "page_prev"]:
-            if action == "page_next":
-                data["page"] += 1
-            else:
-                data["page"] = max(0, data["page"] - 1)
-            update_ui_only = True
-
-        elif action == "analyze":
-            if not data["history"]:
-                await context.bot.answer_callback_query(
-                    query.id, text="기록이 없어 분석할 수 없습니다."
-                )
-                return
-            # [수정] 수동 분석 요청 시, 자동 분석을 ON으로 변경
-            data["auto_analysis_enabled"] = True
-            should_analyze = True
-
-        elif action == "toggle_auto_analysis":
-            current_state = data.get("auto_analysis_enabled", False)
-            new_state = not current_state
-            data["auto_analysis_enabled"] = new_state
-
-            if new_state and data.get("history"):
-                should_analyze = True
-            else:
-                data["recommendation"] = None
-                data["recommendation_info"] = None
-                update_ui_only = True
-
+        
+        # 피드백 기록 (승/패)
         elif action in ["feedback_win", "feedback_loss"]:
             rec_info = data.get("recommendation_info")
-            if not rec_info:
-                await context.bot.answer_callback_query(
-                    query.id, text="피드백할 추천 결과가 없습니다."
-                )
-                return
-                
-            recommendation = rec_info["bet_on"]
-            result_to_add = ""
+            if not rec_info: return
             
-            if action == "feedback_win":
+            recommendation = rec_info["bet_on"]
+            outcome = "win" if action == "feedback_win" else "loss"
+            log_result(user_id, recommendation, outcome)
+
+            if outcome == "win":
                 result_to_add = "P" if recommendation == "Player" else "B"
-                log_result(user_id, recommendation, "win")
                 pb_history = [h for h in data["history"] if h != "T"]
                 data.setdefault("correct_indices", []).append(len(pb_history))
-            else:  # feedback_loss
-                result_to_add = "P" if recommendation == "Banker" else "B"
-                log_result(user_id, recommendation, "loss")
-
-            data["history"].append(result_to_add)
-            if result_to_add == "P":
-                data["player_wins"] += 1
             else:
-                data["banker_wins"] += 1
+                result_to_add = "P" if recommendation == "Banker" else "B"
+            
+            data["history"].append(result_to_add)
+            if result_to_add == "P": data["player_wins"] += 1
+            else: data["banker_wins"] += 1
             should_analyze = True
 
-        # --- 분석 및 UI 업데이트 로직 ---
+        # 기타 기능 (리셋, 토글, 페이지, 수동분석)
+        elif action == "reset":
+            log_reset(user_id)
+            user_data[user_id].update({
+                "player_wins": 0, "banker_wins": 0, "history": [], "recommendation": None,
+                "page": 0, "correct_indices": [], "auto_analysis_enabled": True,
+            })
+        elif action == "toggle_auto_analysis":
+            data["auto_analysis_enabled"] = not data.get("auto_analysis_enabled", True)
+        elif action in ["page_next", "page_prev"]:
+            if action == "page_next": data["page"] += 1
+            else: data["page"] = max(0, data["page"] - 1)
+        elif action == "analyze":
+            if not data["history"]: return
+            should_analyze = True
+        
+        # [수정] 새로운 결과가 추가된 경우, 마지막 페이지로 자동 이동
+        if action in ["P", "B", "T", "feedback_win", "feedback_loss"]:
+             _, total_pages = _get_page_info(data["history"])
+             data["page"] = max(0, total_pages - 1)
+
+        # --- UI 업데이트 및 분석 실행 ---
+        is_analyzing = should_analyze
+        await update_message(context, query, user_id, is_analyzing=is_analyzing)
+        
         if should_analyze:
-            last_col, total_pages = _get_page_info(data["history"])
-            data["page"] = max(0, total_pages - 1)
-            
-            await update_message(context, query, user_id, is_analyzing=True)
-            
             await run_analysis(user_id)
-            
             await update_message(context, query, user_id, is_analyzing=False)
 
         elif update_ui_only:
