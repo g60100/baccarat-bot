@@ -289,18 +289,21 @@ def build_keyboard(user_id):
     if total_pages > 1:
         if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
         if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
-    # [1] 토글 버튼
+
+    # 자동분석 토글 버튼 텍스트
     auto_analysis = data.get('auto_analysis_enabled', True)
-    toggle_text = "🔔 자동분석 ON" if auto_analysis else "🔕 자동분석 OFF"
+    toggle_text = "🔔자동분석ON" if auto_analysis else "🔕자동분석OFF"
+
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어(수동 기록)", callback_data='P'),
-         InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data='B')],
-        [InlineKeyboardButton("🟢 타이 (수동 기록)", callback_data='T')],
+         InlineKeyboardButton("🔴 뱅 커 (수동 기록)", callback_data='B')],
+        # 여기서 행을 2칸으로 나눔!
+        [InlineKeyboardButton(toggle_text, callback_data='toggle_auto_analysis'),
+         InlineKeyboardButton("🟢 타 이 (수동 기록)", callback_data='T')],
     ]
     if page_buttons: keyboard.append(page_buttons)
     keyboard.append([
-        InlineKeyboardButton(toggle_text, callback_data='toggle_auto_analysis'),
-        InlineKeyboardButton("🔍 AI분석 수동 요청", callback_data='analyze'),
+        InlineKeyboardButton("🔍 AI수동분석 요청", callback_data='analyze'),
         InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')
     ])
     if data.get('recommendation'):
@@ -460,3 +463,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
