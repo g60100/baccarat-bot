@@ -250,6 +250,8 @@ def get_gpt4_recommendation(user_id, game_history):
             performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
     
     prompt = f"당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다... (중략)\n[데이터 1: 현재 게임의 흐름]\n{game_history}\n[데이터 2: 당신의 과거 추천 실적]\n{performance_text}"
+    1. 5번 이상 내려가다가 꺽인 줄 다음으로는 반대가 나올 확률이 70% 이상이다.
+    2. 첫번째와 두번째가 나올 확률이 가장 많다
 
     try:
         completion = client.chat.completions.create(
@@ -274,7 +276,7 @@ def build_caption_text(user_id, is_analyzing=False):
     player_wins, banker_wins = data.get("player_wins", 0), data.get("banker_wins", 0)
     recommendation = data.get("recommendation", None)
     feedback_stats = get_feedback_stats(user_id)
-    guide_text = "...\n(가이드 텍스트 생략)\n..."
+    guide_text = "...\n(처음 시작 시 P나 B를 선택 후 ON을 클릭하면 자동 분석 시작)\n..."
     
     rec_text = ""
     if is_analyzing:
@@ -310,15 +312,15 @@ def build_keyboard(user_id):
     ]
     if page_buttons: keyboard.append(page_buttons)
     keyboard.append([
-        InlineKeyboardButton("🔍분석", callback_data="analyze"),
-        InlineKeyboardButton("🔄초기화", callback_data="reset"),
+        InlineKeyboardButton("🔍자동 분석", callback_data="analyze"),
+        InlineKeyboardButton("🔄기록 초기화", callback_data="reset"),
     ])
 
     if data.get("recommendation"):
         stats = get_feedback_stats(user_id)
         keyboard.append([
-            InlineKeyboardButton(f'✅승({stats["win"]})', callback_data="feedback_win"),
-            InlineKeyboardButton(f'❌패({stats["loss"]})', callback_data="feedback_loss"),
+            InlineKeyboardButton(f'✅AI 분석 승({stats["win"]})', callback_data="feedback_win"),
+            InlineKeyboardButton(f'❌AI 분석 패({stats["loss"]})', callback_data="feedback_loss"),
         ])
     return InlineKeyboardMarkup(keyboard)
 
@@ -356,9 +358,10 @@ async def run_analysis(user_id):
 async def start(update: Update, context: CallbackContext) -> None:
     user = update.effective_user
     log_activity(user.id, "start")
+    # [수정] auto_analysis_enabled의 기본값을 False로 변경
     user_data[user.id] = {
         "player_wins": 0, "banker_wins": 0, "history": [], "recommendation": None,
-        "page": 0, "correct_indices": [], "auto_analysis_enabled": True,
+        "page": 0, "correct_indices": [], "auto_analysis_enabled": False,
     }
     image_path = create_big_road_image(user.id)
     await update.message.reply_photo(
@@ -382,7 +385,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         if user_id not in user_data:
             user_data[user_id] = {
                 "player_wins": 0, "banker_wins": 0, "history": [], "recommendation": None,
-                "page": 0, "correct_indices": [], "auto_analysis_enabled": True,
+                "page": 0, "correct_indices": [], "auto_analysis_enabled": False,
             }
 
         data = user_data[user_id]
@@ -390,14 +393,14 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         log_activity(user_id, "button_click", action)
 
         should_analyze = False
-        update_ui_only = False # 에러 방지를 위해 변수 선언 추가
+        update_ui_only = False
 
         if action in ["P", "B", "T"]:
             data["history"].append(action)
             if action == "P": data["player_wins"] += 1
             elif action == "B": data["banker_wins"] += 1
             data["recommendation"] = None
-            if action in ["P", "B"] and data.get("auto_analysis_enabled", True):
+            if action in ["P", "B"] and data.get("auto_analysis_enabled", False):
                 should_analyze = True
             else:
                 update_ui_only = True
@@ -426,12 +429,12 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             log_reset(user_id)
             user_data[user_id].update({
                 "player_wins": 0, "banker_wins": 0, "history": [], "recommendation": None,
-                "page": 0, "correct_indices": [], "auto_analysis_enabled": True,
+                "page": 0, "correct_indices": [], "auto_analysis_enabled": False,
             })
             update_ui_only = True
             
         elif action == "toggle_auto_analysis":
-            data["auto_analysis_enabled"] = not data.get("auto_analysis_enabled", True)
+            data["auto_analysis_enabled"] = not data.get("auto_analysis_enabled", False)
             if not data["auto_analysis_enabled"]:
                  data["recommendation"] = None
                  data["recommendation_info"] = None
@@ -444,9 +447,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
         elif action == "analyze":
             if not data["history"]: return
+            # [수정] 수동 분석 요청 시, 자동 분석을 ON으로 변경
+            data["auto_analysis_enabled"] = True
             should_analyze = True
         
-        # 새로운 결과가 추가된 경우, 마지막 페이지로 자동 이동
         if action in ["P", "B", "T", "feedback_win", "feedback_loss"]:
              _, total_pages = _get_page_info(data["history"])
              data["page"] = max(0, total_pages - 1)
