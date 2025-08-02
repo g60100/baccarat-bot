@@ -290,7 +290,7 @@ def build_keyboard(user_id):
         if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     auto_analysis = data.get('auto_analysis_enabled', False)  # 기본 OFF
-    toggle_text = "🔔 자동분석 ON" if auto_analysis else "🔕 자동분석 OFF"
+    toggle_text = "🔔 자동분석 ON 상태" if auto_analysis else "🔕 자동분석 OFF 상태"
 
     keyboard = [
         [InlineKeyboardButton("🔵 플레이어(수동 기록)", callback_data='P'),
@@ -501,3 +501,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
