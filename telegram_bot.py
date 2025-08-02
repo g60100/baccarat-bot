@@ -112,8 +112,10 @@ def get_feedback_stats(user_id):
         cursor.execute("SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? GROUP BY outcome", (user_id,))
     stats = {'win': 0, 'loss': 0}
     for outcome, count in cursor.fetchall():
-        if outcome == 'win': stats['win'] = count
-        elif outcome == 'loss': stats['loss'] = count
+        if outcome == 'win':
+            stats['win'] = count
+        elif outcome == 'loss':
+            stats['loss'] = count
     conn.close()
     return stats
 
@@ -272,7 +274,8 @@ def _get_page_info(history):
     last_winner = None
     for winner in history:
         if winner == 'T': continue
-        if winner != last_winner: last_col += 1
+        if winner != last_winner:
+            last_col += 1
         last_winner = winner
     total_cols = last_col + 1
     total_pages = math.ceil(total_cols / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
@@ -286,8 +289,10 @@ def build_keyboard(user_id):
     last_col, total_pages = _get_page_info(history)
     page_buttons = []
     if total_pages > 1:
-        if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
-        if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+        if page > 0:
+            page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+        if page < total_pages - 1:
+            page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     auto_analysis = data.get('auto_analysis_enabled', False)  # 기본 OFF
     toggle_text = "🔔 자동분석 ON 상태" if auto_analysis else "🔕 자동분석 OFF 상태"
@@ -404,21 +409,22 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             current_state = data.get('auto_analysis_enabled', False)
             new_state = not current_state
             data['auto_analysis_enabled'] = new_state
-    if new_state:  # ON
-        if data.get('history'):
-            should_analyze = True
-        else:
-            update_ui_only = True
-    else:  # OFF
-        data['recommendation'] = None
-        data['recommendation_info'] = None
-        update_ui_only = True
+
+            if new_state:  # ON
+                if data.get('history'):
+                    should_analyze = True
+                else:
+                    update_ui_only = True
+            else:  # OFF
+                data['recommendation'] = None
+                data['recommendation_info'] = None
+                update_ui_only = True
 
         elif action == 'feedback_win':
             rec_info = data.get('recommendation_info')
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-               return
+                return
             recommendation = rec_info['bet_on']  # "Player" 또는 "Banker"
             result_to_add = 'P' if recommendation == "Player" else 'B'
             data['history'].append(result_to_add)
@@ -426,11 +432,11 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 data['player_wins'] += 1
             elif result_to_add == 'B':
                 data['banker_wins'] += 1
-           pb_history = [h for h in data['history'] if h != 'T']
-           data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-           log_activity(user_id, "feedback", f"{recommendation}:win")
-           log_result(user_id, recommendation, "win")
-           should_analyze = True  # AI 재분석 트리거
+            pb_history = [h for h in data['history'] if h != 'T']
+            data.setdefault('correct_indices', []).append(len(pb_history) - 1)
+            log_activity(user_id, "feedback", f"{recommendation}:win")
+            log_result(user_id, recommendation, "win")
+            should_analyze = True  # AI 재분석 트리거
 
         elif action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
@@ -500,3 +506,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+    
