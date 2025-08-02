@@ -112,10 +112,8 @@ def get_feedback_stats(user_id):
         cursor.execute("SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? GROUP BY outcome", (user_id,))
     stats = {'win': 0, 'loss': 0}
     for outcome, count in cursor.fetchall():
-        if outcome == 'win':
-            stats['win'] = count
-        elif outcome == 'loss':
-            stats['loss'] = count
+        if outcome == 'win': stats['win'] = count
+        elif outcome == 'loss': stats['loss'] = count
     conn.close()
     return stats
 
@@ -191,7 +189,7 @@ def create_big_road_image(user_id):
                     draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=2)
                 if 'T' in cell_data:
                     draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill='#2ecc71', width=2)
-    image_path = f"/tmp/baccarat_road_{user_id}.png"
+    image_path = "baccarat_road.png"
     img.save(image_path)
     return image_path
 
@@ -254,11 +252,11 @@ def build_caption_text(user_id, is_analyzing=False):
 """
     rec_text = ""
     if is_analyzing:
-        rec_text = f"\n\n👇 *ChetGPT-4o AI분석 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 분석중입니다...')}_"
+        rec_text = f"\n\n👇 *Chet GPT-4o AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
     elif recommendation:
-        rec_text = f"\n\n👇 *ChetGPT-4o AI분석 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
-    title = escape_markdown("ZENTRA가 개발한 ChetGPT-4o AI 분석으로 베팅에 참조하세요.")
-    subtitle = escape_markdown("베팅의 결정과 베팅의 결과는 본인에게 있습니다.")
+        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
+    title = escape_markdown("ZENTRA가 개발한 Chet GPT-4o AI 분석으로 베팅에 참조하세요.")
+    subtitle = escape_markdown("베팅 결정과 베팅 결과의 책임은 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     win_count = feedback_stats.get('win', 0)
     loss_count = feedback_stats.get('loss', 0)
@@ -274,8 +272,7 @@ def _get_page_info(history):
     last_winner = None
     for winner in history:
         if winner == 'T': continue
-        if winner != last_winner:
-            last_col += 1
+        if winner != last_winner: last_col += 1
         last_winner = winner
     total_cols = last_col + 1
     total_pages = math.ceil(total_cols / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
@@ -289,10 +286,8 @@ def build_keyboard(user_id):
     last_col, total_pages = _get_page_info(history)
     page_buttons = []
     if total_pages > 1:
-        if page > 0:
-            page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
-        if page < total_pages - 1:
-            page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
+        if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
+        if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
     auto_analysis = data.get('auto_analysis_enabled', False)  # 기본 OFF
     toggle_text = "🔔 자동분석 ON 상태" if auto_analysis else "🔕 자동분석 OFF 상태"
@@ -410,12 +405,12 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             new_state = not current_state
             data['auto_analysis_enabled'] = new_state
 
-            if new_state:  # ON
+            if new_state:  # 토글 ON일 때 즉시 분석
                 if data.get('history'):
                     should_analyze = True
                 else:
                     update_ui_only = True
-            else:  # OFF
+            else:  # 토글 OFF일 때 즉시 추천 중지
                 data['recommendation'] = None
                 data['recommendation_info'] = None
                 update_ui_only = True
@@ -425,7 +420,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
                 return
-            recommendation = rec_info['bet_on']  # "Player" 또는 "Banker"
+            recommendation = rec_info['bet_on']
             result_to_add = 'P' if recommendation == "Player" else 'B'
             data['history'].append(result_to_add)
             if result_to_add == 'P':
@@ -436,7 +431,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             data.setdefault('correct_indices', []).append(len(pb_history) - 1)
             log_activity(user_id, "feedback", f"{recommendation}:win")
             log_result(user_id, recommendation, "win")
-            should_analyze = True  # AI 재분석 트리거
+            should_analyze = True
 
         elif action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
@@ -497,6 +492,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
 # --- 메인 ---
 def main() -> None:
+    if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
+        print("ERROR: OPENAI_API_KEY 및 TELEGRAM_BOT_TOKEN 설정이 필요합니다.")
+        return
     setup_database()
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
@@ -506,4 +504,3 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
-
