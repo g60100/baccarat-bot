@@ -415,7 +415,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             if action == "P": data["player_wins"] += 1
             elif action == "B": data["banker_wins"] += 1
             data["recommendation"] = None
-            if action in ["P", "B"] and data.get("auto_analysis_enabled", False):
+            
+            # [수정] 'T'를 눌렀을 때도 자동 분석이 실행되도록 조건 변경
+            if data.get("auto_analysis_enabled", False):
                 should_analyze = True
             else:
                 update_ui_only = True
@@ -462,7 +464,6 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
 
         elif action == "analyze":
             if not data["history"]: return
-            # [수정] 수동 분석 요청 시, 자동 분석을 ON으로 변경
             data["auto_analysis_enabled"] = True
             should_analyze = True
         
