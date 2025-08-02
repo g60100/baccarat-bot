@@ -250,8 +250,6 @@ def get_gpt4_recommendation(user_id, game_history):
             performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
     
     prompt = f"당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다... (중략)\n[데이터 1: 현재 게임의 흐름]\n{game_history}\n[데이터 2: 당신의 과거 추천 실적]\n{performance_text}"
-    1. 5번 이상 내려가다가 꺽인 줄 다음으로는 반대가 나올 확률이 70% 이상이다.
-    2. 첫번째와 두번째가 나올 확률이 가장 많다
 
     try:
         completion = client.chat.completions.create(
