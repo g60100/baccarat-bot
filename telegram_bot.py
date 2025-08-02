@@ -51,27 +51,25 @@ user_locks = defaultdict(asyncio.Lock)
 
 # === SQLite: WAL 모드, write timeout/retry 래퍼 함수 ===
 def get_db_conn():
-    conn = sqlite3.connect(DB_FILE, timeout=10, isolation_level=None)
+    conn = sqlite3.connect(DB_FILE, timeout=10)
     try:
         conn.execute("PRAGMA journal_mode=WAL;")
+        conn.execute("PRAGMA foreign_keys=ON;")
     except Exception as e:
         print(f"WAL mode set 실패: {e}")
     return conn
 
 
 def safe_db_write(query, params=()):
-    retries, delay = 3, 1
-    for _ in range(retries):
+    retries, delay = 5, 1
+    for i in range(retries):
         try:
-            conn = get_db_conn()
-            cur = conn.cursor()
-            cur.execute(query, params)
-            conn.commit()
-            conn.close()
-            return
+            with get_db_conn() as conn:
+                conn.execute(query, params)
+                return
         except sqlite3.OperationalError as e:
             if "locked" in str(e):
-                time.sleep(delay)
+                time.sleep(delay * (i + 1))
             else:
                 raise
     raise RuntimeError("DB write lock 지속됨")
@@ -79,25 +77,22 @@ def safe_db_write(query, params=()):
 
 # --- DB 테이블 생성 ---
 def setup_database():
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_seen TEXT, last_seen TEXT)"
-    )
-    cursor.execute(
-        "CREATE TABLE IF NOT EXISTS activity (activity_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, timestamp TEXT, action TEXT, details TEXT)"
-    )
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS results_log (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
-        recommendation TEXT, outcome TEXT, created DATETIME)"""
-    )
-    cursor.execute(
-        """CREATE TABLE IF NOT EXISTS resets (
-        id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, reset_time DATETIME)"""
-    )
-    conn.commit()
-    conn.close()
+    with get_db_conn() as conn:
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS users (user_id INTEGER PRIMARY KEY, username TEXT, first_seen TEXT, last_seen TEXT)"
+        )
+        conn.execute(
+            "CREATE TABLE IF NOT EXISTS activity (activity_id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, timestamp TEXT, action TEXT, details TEXT)"
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS results_log (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER,
+            recommendation TEXT, outcome TEXT, created DATETIME)"""
+        )
+        conn.execute(
+            """CREATE TABLE IF NOT EXISTS resets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, user_id INTEGER, reset_time DATETIME)"""
+        )
 
 
 def log_activity(user_id, action, details=""):
@@ -124,32 +119,31 @@ def log_reset(user_id):
 
 
 def get_feedback_stats(user_id):
-    conn = get_db_conn()
-    cursor = conn.cursor()
-    cursor.execute(
-        "SELECT reset_time FROM resets WHERE user_id=? ORDER BY reset_time DESC LIMIT 1",
-        (user_id,),
-    )
-    row = cursor.fetchone()
-    last_reset = row[0] if row else None
-
-    if last_reset:
+    with get_db_conn() as conn:
+        cursor = conn.cursor()
         cursor.execute(
-            """SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? AND created >= ? GROUP BY outcome""",
-            (user_id, last_reset),
-        )
-    else:
-        cursor.execute(
-            "SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? GROUP BY outcome",
+            "SELECT reset_time FROM resets WHERE user_id=? ORDER BY reset_time DESC LIMIT 1",
             (user_id,),
         )
-    stats = {"win": 0, "loss": 0}
-    for outcome, count in cursor.fetchall():
-        if outcome == "win":
-            stats["win"] = count
-        elif outcome == "loss":
-            stats["loss"] = count
-    conn.close()
+        row = cursor.fetchone()
+        last_reset = row[0] if row else None
+
+        if last_reset:
+            cursor.execute(
+                """SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? AND created >= ? GROUP BY outcome""",
+                (user_id, last_reset),
+            )
+        else:
+            cursor.execute(
+                "SELECT outcome, COUNT(*) FROM results_log WHERE user_id=? GROUP BY outcome",
+                (user_id,),
+            )
+        stats = {"win": 0, "loss": 0}
+        for outcome, count in cursor.fetchall():
+            if outcome == "win":
+                stats["win"] = count
+            elif outcome == "loss":
+                stats["loss"] = count
     return stats
 
 
@@ -166,21 +160,22 @@ def create_big_road_image(user_id):
     page = data.get("page", 0)
     correct_indices = data.get("correct_indices", [])
 
-    cell_size = 22
-    rows = 6
-    full_grid_cols = 120
+    cell_size, rows, full_grid_cols = 22, 6, 120
     full_grid = [[""] * full_grid_cols for _ in range(rows)]
     last_positions = {}
     pb_history_index = -1
+    col, row = -1, 0
+
     if history:
-        col, row, last_winner = -1, 0, None
+        last_winner = None
         for i, winner in enumerate(history):
             if winner == "T":
                 if last_winner and last_winner in last_positions:
-                    r, c = last_positions[last_winner]
-                    if full_grid[r][c]:
-                        full_grid[r][c] += "T"
+                    r_pos, c_pos = last_positions[last_winner]
+                    if full_grid[r_pos][c_pos]:
+                        full_grid[r_pos][c_pos] += "T"
                 continue
+            
             pb_history_index += 1
             if winner != last_winner:
                 col += 1
@@ -195,6 +190,7 @@ def create_big_road_image(user_id):
                 full_grid[row][col] = winner + is_correct
                 last_positions[winner] = (row, col)
             last_winner = winner
+
     start_col = page * COLS_PER_PAGE
     end_col = start_col + COLS_PER_PAGE
     page_grid = [row[start_col:end_col] for row in full_grid]
@@ -207,10 +203,8 @@ def create_big_road_image(user_id):
         font = ImageFont.truetype("arial.ttf", 16)
     except IOError:
         font = ImageFont.load_default()
-    total_cols_needed = max(col + 1, 1) if "col" in locals() else 1
-    total_pages = (
-        math.ceil(total_cols_needed / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
-    )
+
+    _, total_pages = _get_page_info(history)
     draw.text(
         (10, 5),
         f"ZENTRA AI - Big Road (Page {page + 1} / {total_pages})",
@@ -228,36 +222,34 @@ def create_big_road_image(user_id):
                 is_correct_prediction = "C" in cell_data
                 color = "#3498db" if winner_char == "P" else "#e74c3c"
                 if is_correct_prediction:
-                    draw.ellipse(
-                        [(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)],
-                        fill=color,
-                        outline=color,
-                        width=2,
-                    )
+                    draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], fill=color, outline=color, width=2)
                 else:
-                    draw.ellipse(
-                        [(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=2
-                    )
+                    draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=2)
                 if "T" in cell_data:
-                    draw.line(
-                        [(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill="#2ecc71", width=2
-                    )
-    image_path = "baccarat_road.png"
+                    draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill="#2ecc71", width=2)
+    
+    image_path = f"baccarat_road_{user_id}.png"
     img.save(image_path)
     return image_path
 
 
 # --- GPT-4o 추천 ---
-def get_gpt4_recommendation(game_history, ai_performance_history):
+def get_gpt4_recommendation(user_id, game_history):
+    conn = get_db_conn()
+    cursor = conn.cursor()
+    cursor.execute("SELECT recommendation, outcome FROM results_log WHERE user_id=?", (user_id,))
+    ai_performance_history = [{"recommendation": r[0], "outcome": r[1]} for r in cursor.fetchall()]
+    conn.close()
+
     performance_text = "아직 나의 추천 기록이 없습니다."
     if ai_performance_history:
         performance_text = "아래는 당신(AI)의 과거 추천 기록과 그 실제 결과입니다:\n"
         for i, record in enumerate(ai_performance_history[-10:]):
             outcome_text = "승리" if record.get("outcome") == "win" else "패배"
             performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
-
+    
     prompt = f"""
-    당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다...
+    당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다... (중략)
     [데이터 1: 현재 게임의 흐름]
     {game_history}
     [데이터 2: 당신의 과거 추천 실적]
@@ -267,19 +259,13 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a world-class Baccarat analyst who provides reasoning before the final recommendation.",
-                },
+                {"role": "system", "content": "You are a world-class Baccarat analyst..."},
                 {"role": "user", "content": prompt},
             ],
         )
         full_response = completion.choices[0].message.content
-        recommendation_part = ""
-        if "추천:" in full_response:
-            recommendation_part = full_response.split("추천:")[-1]
-        else:
-            recommendation_part = full_response
+        recommendation_part = full_response.split("추천:")[-1] if "추천:" in full_response else full_response
+        
         if "Player" in recommendation_part or "플레이어" in recommendation_part:
             return "Player"
         elif "Banker" in recommendation_part or "뱅커" in recommendation_part:
@@ -300,32 +286,27 @@ def build_caption_text(user_id, is_analyzing=False):
     guide_text = """
 = Zentra ChetGPT-4o AI 분석기 사용 순서 =
 1. 게임결과 마지막 결과를 "수동기록"으로 기록
-2. 1번 수동기록 끝나면 "자동분석 OFF"를 클릭...
-3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
-   게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
-4. 이후부터 3번 항목만 반복, "타이"시 타이 클릭
-5. 새롭게 하기 위해서는 "기록 초기화" 클릭
-6. AI분석 OFF하면 "AI분석수동요청"클릭시 AI분석
-7. AI는 참고용이며 수익을 보장하지 않습니다. 
+2. 자동분석 ON/OFF 버튼으로 자동분석 여부 선택
+3. AI추천 결과에 따라 '승'/'패' 버튼 클릭
+4. 새 게임 시작은 "기록 초기화" 클릭
+5. AI는 참고용이며 수익을 보장하지 않습니다.
 """
     rec_text = ""
     if is_analyzing:
-        rec_text = f"\n\n👇 *Chet GPT-4o AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
+        rec_text = f"\n\n👇 *AI 추천* 👇\n_{escape_markdown('ChetGPT-4o AI가 분석 중입니다...')}_"
     elif recommendation:
-        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
-    title = escape_markdown(
-        "ZENTRA가 개발한 Chet GPT-4o AI 분석으로 베팅에 참조하세요."
-    )
-    subtitle = escape_markdown("베팅 결정과 베팅 결과의 책임은 본인에게 있습니다.")
-    player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown(
-        "뱅커 총 횟수"
-    )
+        rec_text = f"\n\n👇 *AI 추천* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
+    
+    title = escape_markdown("ZENTRA 개발 Chet GPT-4o AI 분석기")
+    subtitle = escape_markdown("베팅 결정과 결과의 책임은 본인에게 있습니다.")
+    player_title, banker_title = escape_markdown("플레이어"), escape_markdown("뱅커")
     win_count = feedback_stats.get("win", 0)
     loss_count = feedback_stats.get("loss", 0)
+    
     return (
         f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n"
         f"*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}\n\n"
-        f'✅ AI추천"승" 클릭: {win_count} ┃ ❌ AI추천"패" 클릭: {loss_count}'
+        f'✅ AI "승": {win_count} ┃ ❌ AI "패": {loss_count}'
     )
 
 
@@ -351,71 +332,69 @@ def build_keyboard(user_id):
     data = user_data.get(user_id, {})
     page = data.get("page", 0)
     history = data.get("history", [])
-    last_col, total_pages = _get_page_info(history)
+    _, total_pages = _get_page_info(history)
     page_buttons = []
     if total_pages > 1:
         if page > 0:
-            page_buttons.append(
-                InlineKeyboardButton("⬅️ 이전", callback_data="page_prev")
-            )
+            page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data="page_prev"))
         if page < total_pages - 1:
-            page_buttons.append(
-                InlineKeyboardButton("다음 ➡️", callback_data="page_next")
-            )
+            page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data="page_next"))
 
-    auto_analysis = data.get("auto_analysis_enabled", False)  # 기본 OFF
-    toggle_text = "🔔 자동분석 ON 상태" if auto_analysis else "🔕 자동분석 OFF 상태"
+    auto_analysis = data.get("auto_analysis_enabled", False)
+    toggle_text = "🔔 자동분석 ON" if auto_analysis else "🔕 자동분석 OFF"
 
     keyboard = [
         [
-            InlineKeyboardButton("🔵 플레이어(수동 기록)", callback_data="P"),
-            InlineKeyboardButton("🔴 뱅커 (수동 기록)", callback_data="B"),
+            InlineKeyboardButton("🔵 P (수동)", callback_data="P"),
+            InlineKeyboardButton("🔴 B (수동)", callback_data="B"),
         ],
         [
             InlineKeyboardButton(toggle_text, callback_data="toggle_auto_analysis"),
-            InlineKeyboardButton("🟢 타이 (수동 기록)", callback_data="T"),
+            InlineKeyboardButton("🟢 T (수동)", callback_data="T"),
         ],
     ]
     if page_buttons:
         keyboard.append(page_buttons)
 
-    keyboard.append(
-        [
-            InlineKeyboardButton("🔍 AI분석 수동 요청", callback_data="analyze"),
-            InlineKeyboardButton("🔄 기록 초기화", callback_data="reset"),
-        ]
-    )
+    keyboard.append([
+        InlineKeyboardButton("🔍 AI분석 (수동)", callback_data="analyze"),
+        InlineKeyboardButton("🔄 초기화", callback_data="reset"),
+    ])
 
     if data.get("recommendation"):
         feedback_stats = get_feedback_stats(user_id)
-        keyboard.append(
-            [
-                InlineKeyboardButton(
-                    f'✅ AI추천 "승" 클릭 ({feedback_stats["win"]})',
-                    callback_data="feedback_win",
-                ),
-                InlineKeyboardButton(
-                    f'❌ AI추천 "패" 클릭 ({feedback_stats["loss"]})',
-                    callback_data="feedback_loss",
-                ),
-            ]
-        )
-
+        keyboard.append([
+            InlineKeyboardButton(f'✅ AI "승" ({feedback_stats["win"]})', callback_data="feedback_win"),
+            InlineKeyboardButton(f'❌ AI "패" ({feedback_stats["loss"]})', callback_data="feedback_loss"),
+        ])
     return InlineKeyboardMarkup(keyboard)
+
+
+# --- UI 업데이트 헬퍼 ---
+async def update_message(context, query, user_id, is_analyzing=False):
+    try:
+        image_path = create_big_road_image(user_id)
+        media = InputMediaPhoto(
+            media=open(image_path, "rb"),
+            caption=build_caption_text(user_id, is_analyzing=is_analyzing),
+            parse_mode=ParseMode.MARKDOWN_V2,
+        )
+        await query.edit_message_media(
+            media=media, reply_markup=build_keyboard(user_id)
+        )
+    except Exception as e:
+        if "Message is not modified" not in str(e):
+            print(f"메시지 업데이트 오류: {e}")
 
 
 # --- start 커맨드 ---
 async def start(update: Update, context: CallbackContext) -> None:
-    user_id = update.message.from_user.id
+    user_id = update.effective_user.id
     log_activity(user_id, "start")
     user_data[user_id] = {
-        "player_wins": 0,
-        "banker_wins": 0,
-        "history": [],
-        "recommendation": None,
-        "page": 0,
-        "correct_indices": [],
-        "auto_analysis_enabled": False,  # 기본 OFF
+        "player_wins": 0, "banker_wins": 0, "history": [],
+        "recommendation": None, "page": 0, "correct_indices": [],
+        "auto_analysis_enabled": True,
     }
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(
@@ -426,31 +405,39 @@ async def start(update: Update, context: CallbackContext) -> None:
     )
 
 
+# --- AI 분석 로직 ---
+async def run_analysis(user_id):
+    data = user_data[user_id]
+    history_str = ", ".join(data["history"])
+    new_recommendation = get_gpt4_recommendation(user_id, history_str)
+    
+    if new_recommendation:
+        data["recommendation"] = new_recommendation
+        data["recommendation_info"] = {
+            "bet_on": new_recommendation,
+            "at_round": len([h for h in data["history"] if h != "T"]),
+        }
+
 # --- 버튼 콜백 ---
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
-    lock = user_locks[user_id]
 
     try:
         await query.answer()
     except Exception as e:
         print(f"query.answer() error: {e}")
 
+    lock = user_locks[user_id]
     if lock.locked():
-        await query.answer("처리 중입니다...")
         return
 
     async with lock:
         if user_id not in user_data:
             user_data[user_id] = {
-                "player_wins": 0,
-                "banker_wins": 0,
-                "history": [],
-                "recommendation": None,
-                "page": 0,
-                "correct_indices": [],
-                "auto_analysis_enabled": False,
+                "player_wins": 0, "banker_wins": 0, "history": [],
+                "recommendation": None, "page": 0, "correct_indices": [],
+                "auto_analysis_enabled": True,
             }
 
         data = user_data[user_id]
@@ -458,167 +445,81 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
         log_activity(user_id, "button_click", action)
 
         should_analyze = False
-        update_ui_only = False
 
         if action in ["P", "B", "T"]:
             data["history"].append(action)
-            if action == "P":
-                data["player_wins"] += 1
-            elif action == "B":
-                data["banker_wins"] += 1
+            if action == "P": data["player_wins"] += 1
+            elif action == "B": data["banker_wins"] += 1
             data["recommendation"] = None
             data["recommendation_info"] = None
-            auto_analysis = data.get("auto_analysis_enabled", False)
-
-            update_ui_only = True  # 빅로드는 항상 즉시 갱신
-
-            if action in ["P", "B"] and auto_analysis:
-                should_analyze = True  # 자동분석 ON일 때 즉시 분석
+            if action in ["P", "B"] and data.get("auto_analysis_enabled", True):
+                should_analyze = True
 
         elif action == "reset":
-            user_data[user_id] = {
-                "player_wins": 0,
-                "banker_wins": 0,
-                "history": [],
-                "recommendation": None,
-                "page": 0,
-                "correct_indices": [],
-                "auto_analysis_enabled": False,  # 초기화 시 OFF로
-            }
             log_reset(user_id)
-            update_ui_only = True
+            user_data[user_id] = {
+                "player_wins": 0, "banker_wins": 0, "history": [],
+                "recommendation": None, "page": 0, "correct_indices": [],
+                "auto_analysis_enabled": True,
+            }
 
         elif action in ["page_next", "page_prev"]:
-            if action == "page_next":
-                data["page"] += 1
-            else:
-                data["page"] = max(0, data["page"] - 1)
-            update_ui_only = True
+            if action == "page_next": data["page"] += 1
+            else: data["page"] = max(0, data["page"] - 1)
 
         elif action == "analyze":
             if not data["history"]:
-                await context.bot.answer_callback_query(
-                    query.id, text="기록이 없어 분석할 수 없습니다."
-                )
+                await context.bot.answer_callback_query(query.id, text="기록 없음")
                 return
-            # 한번만 AI 분석 실행(자동분석 토글 상태와 무관)
             should_analyze = True
 
         elif action == "toggle_auto_analysis":
-            current_state = data.get("auto_analysis_enabled", False)
-            new_state = not current_state
-            data["auto_analysis_enabled"] = new_state
+            data["auto_analysis_enabled"] = not data.get("auto_analysis_enabled", True)
+            if not data["auto_analysis_enabled"]:
+                 data["recommendation"] = None
+                 data["recommendation_info"] = None
 
-            if new_state:  # 토글 ON일 때 즉시 분석
-                if data.get("history"):
-                    should_analyze = True
-                else:
-                    update_ui_only = True
-            else:  # 토글 OFF일 때 즉시 추천 중지
-                data["recommendation"] = None
-                data["recommendation_info"] = None
-                update_ui_only = True
-
-        elif action == "feedback_win":
+        elif action in ["feedback_win", "feedback_loss"]:
             rec_info = data.get("recommendation_info")
             if not rec_info:
-                await context.bot.answer_callback_query(
-                    query.id, text="피드백할 추천 결과가 없습니다."
-                )
+                await context.bot.answer_callback_query(query.id, text="추천 결과 없음")
                 return
+            
             recommendation = rec_info["bet_on"]
-            result_to_add = "P" if recommendation == "Player" else "B"
+            if action == "feedback_win":
+                result_to_add = "P" if recommendation == "Player" else "B"
+                log_result(user_id, recommendation, "win")
+                pb_history = [h for h in data["history"] if h != "T"]
+                data.setdefault("correct_indices", []).append(len(pb_history))
+            else: # feedback_loss
+                result_to_add = "P" if recommendation == "Banker" else "B"
+                log_result(user_id, recommendation, "loss")
+
             data["history"].append(result_to_add)
-            if result_to_add == "P":
-                data["player_wins"] += 1
-            elif result_to_add == "B":
-                data["banker_wins"] += 1
-            pb_history = [h for h in data["history"] if h != "T"]
-            data.setdefault("correct_indices", []).append(len(pb_history) - 1)
-            log_activity(user_id, "feedback", f"{recommendation}:win")
-            log_result(user_id, recommendation, "win")
+            if result_to_add == "P": data["player_wins"] += 1
+            else: data["banker_wins"] += 1
             should_analyze = True
-
-        elif action == "feedback_loss":
-            rec_info = data.get("recommendation_info")
-            if not rec_info:
-                await context.bot.answer_callback_query(
-                    query.id, text="피드백할 추천 결과가 없습니다."
-                )
-                return
-            recommendation = rec_info["bet_on"]
-            opposite_result = "P" if recommendation == "Banker" else "B"
-            data["history"].append(opposite_result)
-            if opposite_result == "P":
-                data["player_wins"] += 1
-            elif opposite_result == "B":
-                data["banker_wins"] += 1
-            log_activity(user_id, "feedback", f"{recommendation}:loss")
-            log_result(user_id, recommendation, "loss")
-            should_analyze = True
-
-        # --- 분석 및 UI 업데이트 ---
+        
+        # --- UI 업데이트 및 분석 실행 ---
+        is_analyzing = should_analyze
+        await update_message(context, query, user_id, is_analyzing=is_analyzing)
+        
         if should_analyze:
-            last_col, total_pages = _get_page_info(data["history"])
-            data["page"] = max(0, total_pages - 1)
-            image_path = create_big_road_image(user_id)
-            try:
-                await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=open(image_path, "rb"),
-                        caption=build_caption_text(user_id, is_analyzing=True),
-                        parse_mode=ParseMode.MARKDOWN_V2,
-                    ),
-                    reply_markup=build_keyboard(user_id),
-                )
-            except Exception as e:
-                if "Message is not modified" not in str(e):
-                    print(f"분석 중 표시 오류: {e}")
-
-            conn = get_db_conn()
-            cursor = conn.cursor()
-            cursor.execute(
-                "SELECT recommendation, outcome FROM results_log WHERE user_id=?",
-                (user_id,),
-            )
-            records = [
-                {"recommendation": r[0], "outcome": r[1]} for r in cursor.fetchall()
-            ]
-            conn.close()
-
-            history_str = ", ".join(data["history"])
-            new_recommendation = get_gpt4_recommendation(history_str, records)
-            data["recommendation"] = new_recommendation
-            data["recommendation_info"] = {
-                "bet_on": new_recommendation,
-                "at_round": len([h for h in data["history"] if h != "T"]),
-            }
-
-        if update_ui_only or should_analyze:
-            try:
-                image_path = create_big_road_image(user_id)
-                await query.edit_message_media(
-                    media=InputMediaPhoto(
-                        media=open(image_path, "rb"),
-                        caption=build_caption_text(user_id, is_analyzing=False),
-                        parse_mode=ParseMode.MARKDOWN_V2,
-                    ),
-                    reply_markup=build_keyboard(user_id),
-                )
-            except Exception as e:
-                if "Message is not modified" not in str(e):
-                    print(f"메시지 수정 오류: {e}")
+            await run_analysis(user_id)
+            await update_message(context, query, user_id, is_analyzing=False)
 
 
 # --- 메인 ---
 def main() -> None:
     if not OPENAI_API_KEY or not TELEGRAM_BOT_TOKEN:
-        print("ERROR: OPENAI_API_KEY 및 TELEGRAM_BOT_TOKEN 설정이 필요합니다.")
+        print("ERROR: 환경변수 OPENAI_API_KEY, TELEGRAM_BOT_TOKEN 설정이 필요합니다.")
         return
+    
     setup_database()
     application = Application.builder().token(TELEGRAM_BOT_TOKEN).build()
     application.add_handler(CommandHandler("start", start))
     application.add_handler(CallbackQueryHandler(button_callback))
+    
     print("텔레그램 봇이 시작되었습니다...")
     application.run_polling(drop_pending_updates=True)
 
