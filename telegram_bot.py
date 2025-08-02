@@ -322,7 +322,7 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 P", callback_data="P"), InlineKeyboardButton("🔴 B", callback_data="B")],
-        [InlineKeyboardButton("🔔 자동분석중 ON" if auto_analysis else "🔕 자동 분석 OFF", callback_data="toggle_auto_analysis"),
+        [InlineKeyboardButton("🔔 자동분석 중" if auto_analysis else "🔕 자동분석 중단", callback_data="toggle_auto_analysis"),
          InlineKeyboardButton("🟢 T", callback_data="T")],
     ]
     if page_buttons: keyboard.append(page_buttons)
