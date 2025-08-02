@@ -249,13 +249,30 @@ def get_gpt4_recommendation(user_id, game_history):
             outcome_text = "승리" if record.get("outcome") == "win" else "패배"
             performance_text += f"{i+1}. 추천: {record.get('recommendation', 'N/A')}, 실제 결과: {outcome_text}\n"
     
-    prompt = f"당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다... (중략)\n[데이터 1: 현재 게임의 흐름]\n{game_history}\n[데이터 2: 당신의 과거 추천 실적]\n{performance_text}"
+    # [수정] 사용자님의 경험을 AI에게 지시하는 프롬프트 항목 추가
+    prompt = f"""
+    당신은 세계 최고의 50년 경력의 바카라 데이터 분석가입니다. 당신의 임무는 주어진 데이터를 분석하여 가장 확률 높은 다음 베팅을 추천하는 것입니다.
 
+    [데이터 1: 현재 게임의 흐름]
+    {game_history}
+
+    [데이터 2: 당신의 과거 추천 실적]
+    {performance_text}
+
+    [데이터 3: 베팅 전략 추가 지침 (사용자 경험)]
+    1. 단순히 마지막 결과를 따라가는 추천은 절대 지양한다.
+    2. 플레이어든 뱅커든, 한쪽의 결과가 5번 이상 연속되면(장줄), 반대 결과가 나올 확률을 더 높게 고려한다.
+    3. 플레이어와 뱅커가 번갈아 나오는 전환(일명 '퐁당' 또는 'chop') 패턴이 나타나는지 주의 깊게 살핀다.
+    4. 전체적인 흐름을 보고, 연속(streak) 패턴과 전환(chop) 패턴 중 현재 어떤 패턴이 더 우세한지 판단하여 추천한다.
+
+    [분석 및 추천]
+    위 3가지 데이터와 지침을 종합적으로 분석하여, 최종 추천을 "추천:" 이라는 단어 뒤에 Player 또는 Banker 로만 결론내려주십시오.
+    """
     try:
         completion = client.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": "You are a world-class Baccarat analyst..."},
+                {"role": "system", "content": "You are a world-class Baccarat analyst with 50 years of experience who provides deep strategic reasoning."},
                 {"role": "user", "content": prompt},
             ],
         )
@@ -264,7 +281,7 @@ def get_gpt4_recommendation(user_id, game_history):
         
         if "Player" in part or "플레이어" in part: return "Player"
         if "Banker" in part or "뱅커" in part: return "Banker"
-        return "Banker"
+        return "Banker" # 명확한 단어가 없으면 기본값으로 Banker 반환
     except Exception as e:
         print(f"GPT-4 API Error: {e}")
         return None
@@ -305,12 +322,12 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 P", callback_data="P"), InlineKeyboardButton("🔴 B", callback_data="B")],
-        [InlineKeyboardButton("🔔 ON" if auto_analysis else "🔕 OFF", callback_data="toggle_auto_analysis"),
+        [InlineKeyboardButton("🔔 자동분석 중 ON" if auto_analysis else "🔕 자동 분석 OFF", callback_data="toggle_auto_analysis"),
          InlineKeyboardButton("🟢 T", callback_data="T")],
     ]
     if page_buttons: keyboard.append(page_buttons)
     keyboard.append([
-        InlineKeyboardButton("🔍자동 분석", callback_data="analyze"),
+        InlineKeyboardButton("🔍자동 분석 시작", callback_data="analyze"),
         InlineKeyboardButton("🔄기록 초기화", callback_data="reset"),
     ])
 
