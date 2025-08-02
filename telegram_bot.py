@@ -418,19 +418,19 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             rec_info = data.get('recommendation_info')
             if not rec_info:
                 await context.bot.answer_callback_query(query.id, text="피드백할 추천 결과가 없습니다.")
-                return
-            recommendation = rec_info['bet_on']
+               return
+            recommendation = rec_info['bet_on']  # "Player" 또는 "Banker"
             result_to_add = 'P' if recommendation == "Player" else 'B'
             data['history'].append(result_to_add)
             if result_to_add == 'P':
                 data['player_wins'] += 1
             elif result_to_add == 'B':
                 data['banker_wins'] += 1
-            pb_history = [h for h in data['history'] if h != 'T']
-            data.setdefault('correct_indices', []).append(len(pb_history) - 1)
-            log_activity(user_id, "feedback", f"{recommendation}:win")
-            log_result(user_id, recommendation, "win")
-            should_analyze = True
+           pb_history = [h for h in data['history'] if h != 'T']
+           data.setdefault('correct_indices', []).append(len(pb_history) - 1)
+           log_activity(user_id, "feedback", f"{recommendation}:win")
+           log_result(user_id, recommendation, "win")
+           should_analyze = True  # AI 재분석 트리거
 
         elif action == 'feedback_loss':
             rec_info = data.get('recommendation_info')
@@ -500,3 +500,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
