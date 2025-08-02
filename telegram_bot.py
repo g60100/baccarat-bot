@@ -189,7 +189,7 @@ def create_big_road_image(user_id):
                     draw.ellipse([(x1 + 3, y1 + 3), (x2 - 3, y2 - 3)], outline=color, width=2)
                 if 'T' in cell_data:
                     draw.line([(x1 + 5, y1 + 5), (x2 - 5, y2 - 5)], fill='#2ecc71', width=2)
-    image_path = "baccarat_road.png"
+    image_path = f"/tmp/baccarat_road_{user_id}.png"
     img.save(image_path)
     return image_path
 
@@ -401,19 +401,19 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             should_analyze = True
 
         elif action == 'toggle_auto_analysis':
-            current_state = data.get('auto_analysis_enabled', False)
-            new_state = not current_state
-            data['auto_analysis_enabled'] = new_state
+    current_state = data.get('auto_analysis_enabled', False)
+    new_state = not current_state
+    data['auto_analysis_enabled'] = new_state
 
-            if new_state:  # 토글 ON일 때 즉시 분석
-                if data.get('history'):
-                    should_analyze = True
-                else:
-                    update_ui_only = True
-            else:  # 토글 OFF일 때 즉시 추천 중지
-                data['recommendation'] = None
-                data['recommendation_info'] = None
-                update_ui_only = True
+    if new_state:  # ON
+        if data.get('history'):
+            should_analyze = True
+        else:
+            update_ui_only = True
+    else:  # OFF
+        data['recommendation'] = None
+        data['recommendation_info'] = None
+        update_ui_only = True
 
         elif action == 'feedback_win':
             rec_info = data.get('recommendation_info')
@@ -501,4 +501,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
