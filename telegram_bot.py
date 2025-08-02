@@ -291,7 +291,7 @@ def build_caption_text(user_id, is_analyzing=False):
     player_wins, banker_wins = data.get("player_wins", 0), data.get("banker_wins", 0)
     recommendation = data.get("recommendation", None)
     feedback_stats = get_feedback_stats(user_id)
-    guide_text = "...\n(처음 시작 시 P나 B를 선택 후 ON을 클릭하면 자동 분석 시작)\n..."
+    guide_text = "...\n(처음 시작 시 P나 B를 선택 후 '자동분석시작'을 클릭하세요.)\n..."
     
     rec_text = ""
     if is_analyzing:
@@ -322,7 +322,7 @@ def build_keyboard(user_id):
 
     keyboard = [
         [InlineKeyboardButton("🔵 P", callback_data="P"), InlineKeyboardButton("🔴 B", callback_data="B")],
-        [InlineKeyboardButton("🔔 자동분석 중 ON" if auto_analysis else "🔕 자동 분석 OFF", callback_data="toggle_auto_analysis"),
+        [InlineKeyboardButton("🔔 자동분석중 ON" if auto_analysis else "🔕 자동 분석 OFF", callback_data="toggle_auto_analysis"),
          InlineKeyboardButton("🟢 T", callback_data="T")],
     ]
     if page_buttons: keyboard.append(page_buttons)
