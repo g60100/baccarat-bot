@@ -43,7 +43,7 @@ client = OpenAI(api_key=OPENAI_API_KEY)
 user_data = {}
 user_locks = defaultdict(asyncio.Lock)
 
-# === [4] SQLite: WAL 모드, write timeout/retry 적용 ===
+# === SQLite: WAL 모드, write timeout/retry ===
 def get_db_conn():
     conn = sqlite3.connect(DB_FILE, timeout=10, isolation_level=None)
     try:
@@ -53,7 +53,7 @@ def get_db_conn():
     return conn
 
 def safe_db_write(query, params=()):
-    retries, delay = 3, 1  # 재시도 횟수, 지연(1초)
+    retries, delay = 3, 1
     for _ in range(retries):
         try:
             conn = get_db_conn()
@@ -117,7 +117,7 @@ def get_feedback_stats(user_id):
     conn.close()
     return stats
 
-# --- MarkDown Escape ---
+# --- Markdown 이스케이프 ---
 def escape_markdown(text: str) -> str:
     escape_chars = r'_*[]()~`>#+-.=|{}!'
     return ''.join(f'\\{char}' if char in escape_chars else char for char in text)
@@ -242,7 +242,7 @@ def build_caption_text(user_id, is_analyzing=False):
     guide_text = """
 = Zentra ChetGPT-4o AI 분석기 사용 순서 =
 1. 게임의 마지막결과를 '수동기록'으로 기록
-2. 1번 수동입력하면 AI가 자동 분석 시작(ON시)
+2. 1번 수동입력이 끝나면 "자동분석 ON" 클릭
 3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
    게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
 4. 이후부터 3번 항목만 반복, "타이"시 타이 클릭
@@ -252,11 +252,11 @@ def build_caption_text(user_id, is_analyzing=False):
 """
     rec_text = ""
     if is_analyzing:
-        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 자동으로 분석중입니다...')}_"
+        rec_text = f"\n\n👇 *AI 추천 참조* 👇\n_{escape_markdown('ChetGPT-4o AI가 다음 베팅을 분석중입니다...')}_"
     elif recommendation:
         rec_text = f"\n\n👇 *AI 추천 참조* 👇\n{'🔴' if recommendation == 'Banker' else '🔵'} *{escape_markdown(recommendation + '에 베팅참조하세요.')}*"
     title = escape_markdown("ZENTRA가 개발한 Chet GPT-4o AI 분석으로 베팅에 참조하세요.")
-    subtitle = escape_markdown("베팅의 결정과 결과의 책임은 본인에게 있습니다.")
+    subtitle = escape_markdown("베팅 결정과 베팅의 결과의 책임은 본인에게 있습니다.")
     player_title, banker_title = escape_markdown("플레이어 총 횟수"), escape_markdown("뱅커 총 횟수")
     win_count = feedback_stats.get('win', 0)
     loss_count = feedback_stats.get('loss', 0)
@@ -289,7 +289,7 @@ def build_keyboard(user_id):
         if page > 0: page_buttons.append(InlineKeyboardButton("⬅️ 이전", callback_data='page_prev'))
         if page < total_pages - 1: page_buttons.append(InlineKeyboardButton("다음 ➡️", callback_data='page_next'))
 
-    auto_analysis = data.get('auto_analysis_enabled', True)
+    auto_analysis = data.get('auto_analysis_enabled', False)  # 시작 기본 OFF
     toggle_text = "🔔 자동분석 ON" if auto_analysis else "🔕 자동분석 OFF"
 
     keyboard = [
@@ -302,7 +302,6 @@ def build_keyboard(user_id):
         keyboard.append(page_buttons)
 
     keyboard.append([
-        InlineKeyboardButton(toggle_text, callback_data='toggle_auto_analysis'),
         InlineKeyboardButton("🔍 AI분석 수동요청", callback_data='analyze'),
         InlineKeyboardButton("🔄 기록 초기화", callback_data='reset')
     ])
@@ -310,20 +309,20 @@ def build_keyboard(user_id):
     if data.get('recommendation'):
         feedback_stats = get_feedback_stats(user_id)
         keyboard.append([
-            InlineKeyboardButton(f'✅ AI추천"승" 클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
-            InlineKeyboardButton(f'❌ AI추천"패" 클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
+            InlineKeyboardButton(f'✅ AI추천 "승" 클릭 ({feedback_stats["win"]})', callback_data='feedback_win'),
+            InlineKeyboardButton(f'❌ AI추천 "패" 클릭 ({feedback_stats["loss"]})', callback_data='feedback_loss')
         ])
 
     return InlineKeyboardMarkup(keyboard)
 
-# --- start 커맨드 ---
+# --- start 명령어 ---
 async def start(update: Update, context: CallbackContext) -> None:
     user_id = update.message.from_user.id
     log_activity(user_id, "start")
     user_data[user_id] = {
         'player_wins': 0, 'banker_wins': 0, 'history': [],
         'recommendation': None, 'page': 0, 'correct_indices': [],
-        'auto_analysis_enabled': True
+        'auto_analysis_enabled': False  # 시작 디폴트 OFF
     }
     image_path = create_big_road_image(user_id)
     await update.message.reply_photo(
@@ -333,13 +332,12 @@ async def start(update: Update, context: CallbackContext) -> None:
         parse_mode=ParseMode.MARKDOWN_V2
     )
 
-# --- 버튼 콜백 핸들러 ---
+# --- 버튼 콜백 ---
 async def button_callback(update: Update, context: CallbackContext) -> None:
     query = update.callback_query
     user_id = query.from_user.id
     lock = user_locks[user_id]
 
-    # --- 가장 먼저 query.answer 호출 ---
     try:
         await query.answer()
     except Exception as e:
@@ -354,7 +352,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             user_data[user_id] = {
                 'player_wins': 0, 'banker_wins': 0, 'history': [],
                 'recommendation': None, 'page': 0, 'correct_indices': [],
-                'auto_analysis_enabled': True
+                'auto_analysis_enabled': False  # 초기화 시도 시에도 OFF
             }
 
         data = user_data[user_id]
@@ -372,12 +370,10 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
                 data['banker_wins'] += 1
             data['recommendation'] = None
             data['recommendation_info'] = None
-            auto_analysis = data.get('auto_analysis_enabled', True)
+            auto_analysis = data.get('auto_analysis_enabled', False)
 
-            # UI는 무조건 갱신해서 빅로드 반영
-            update_ui_only = True
+            update_ui_only = True  # 무조건 빅로드 UI 갱신
 
-            # 자동분석 ON일 때만 AI 분석 실행
             if action in ['P', 'B'] and auto_analysis:
                 should_analyze = True
 
@@ -385,7 +381,7 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             user_data[user_id] = {
                 'player_wins': 0, 'banker_wins': 0, 'history': [],
                 'recommendation': None, 'page': 0, 'correct_indices': [],
-                'auto_analysis_enabled': True
+                'auto_analysis_enabled': False
             }
             log_reset(user_id)
             update_ui_only = True
@@ -401,11 +397,11 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             if not data['history']:
                 await context.bot.answer_callback_query(query.id, text="기록이 없어 분석할 수 없습니다.")
                 return
-            # 한 번만 AI 분석 실행 (자동분석 토글 상태와 무관)
+            # 한번만 AI 분석 실행, 자동분석 토글은 변경하지 않음
             should_analyze = True
 
         elif action == 'toggle_auto_analysis':
-            current_state = data.get('auto_analysis_enabled', True)
+            current_state = data.get('auto_analysis_enabled', False)
             data['auto_analysis_enabled'] = not current_state
             update_ui_only = True
 
