@@ -262,7 +262,7 @@ def build_caption_text(user_id, is_analyzing=False):
     loss_count = feedback_stats.get('loss', 0)
     return (f"*{title}*\n{subtitle}\n\n{escape_markdown(guide_text)}\n\n"
             f"*{player_title}: {player_wins}* ┃ *{banker_title}: {banker_wins}*{rec_text}\n\n"
-            f"✅ AI추천\ "승\" 클릭: {win_count} ┃ ❌ AI추천\ "패\" 클릭: {loss_count}")
+            f"✅ AI추천\"승\" 클릭: {win_count} ┃ ❌ AI추천\"패\" 클릭: {loss_count}")
 
 # --- 히스토리/페이지 정보 ---
 def _get_page_info(history):
@@ -501,3 +501,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
