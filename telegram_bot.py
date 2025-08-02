@@ -217,32 +217,7 @@ def get_gpt4_recommendation(game_history, ai_performance_history):
                 {"role": "user", "content": prompt}
             ]
         )
-        full_response = completion.choices[0].message.content
-        recommendation_part = ""
-        if "추천:" in full_response:
-            recommendation_part = full_response.split("추천:")[-1]
-        else:
-            recommendation_part = full_response
-        if "Player" in recommendation_part or "플레이어" in recommendation_part:
-            return "Player"
-        elif "Banker" in recommendation_part or "뱅커" in recommendation_part:
-            return "Banker"
-        else:
-            return "Banker"
-    except Exception as e:
-        print(f"GPT-4 API Error: {e}")
-        return None
-
-# --- Caption 빌드 ---
-def build_caption_text(user_id, is_analyzing=False):
-    data = user_data.get(user_id, {})
-    player_wins, banker_wins = data.get('player_wins', 0), data.get('banker_wins', 0)
-    recommendation = data.get('recommendation', None)
-    feedback_stats = get_feedback_stats(user_id)
-    guide_text = """
-= Zentra ChetGPT-4o AI 분석기 사용 순서 =
-1. 게임의 마지막결과를 '수동기록'으로 기록
-2. 1번 수동입력이 끝나면 "자동분석 ON" 클릭
+        ful를 클릭
 3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
    게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
 4. 이후부터 3번 항목만 반복, "타이"시 타이 클릭
@@ -494,3 +469,4 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
