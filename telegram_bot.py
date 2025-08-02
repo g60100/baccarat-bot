@@ -157,6 +157,7 @@ def _get_page_info(history):
     total_pages = math.ceil(total_cols / COLS_PER_PAGE) if COLS_PER_PAGE > 0 else 1
     return last_col, max(1, total_pages)
 
+# --- 빅로드 이미지 생성 ---
 def create_big_road_image(user_id):
     data = user_data.get(user_id, {})
     history = data.get("history", [])
@@ -171,7 +172,7 @@ def create_big_road_image(user_id):
 
     if history:
         last_winner = None
-        for winner in history:
+        for i, winner in enumerate(history):
             if winner == "T":
                 if last_winner and last_winner in last_positions:
                     r_pos, c_pos = last_positions[last_winner]
@@ -197,7 +198,11 @@ def create_big_road_image(user_id):
     start_col = page * COLS_PER_PAGE
     page_grid = [row[start_col : start_col + COLS_PER_PAGE] for row in full_grid]
     
-    top_padding, width, height = 30, COLS_PER_PAGE * cell_size, rows * cell_size + top_padding
+    # [수정] 변수 선언을 여러 줄로 분리하여 UnboundLocalError 해결
+    top_padding = 30
+    width = COLS_PER_PAGE * cell_size
+    height = rows * cell_size + top_padding
+    
     img = Image.new("RGB", (width, height), color="#f4f6f9")
     draw = ImageDraw.Draw(img)
     try:
