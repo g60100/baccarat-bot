@@ -246,7 +246,7 @@ def build_caption_text(user_id, is_analyzing=False):
 3. 게임결과 AI추천 맞으면 'AI추천"승"시'를 클릭
    게임결과 AI추천 틀리면 'AI추천"패"시'를 클릭
 4. 이후부터 3번 항목만 반복, "타이"시 타이 클릭
-5. 새롭게 하기 위해서는 "기록초기화" 클릭
+5. 새롭게 하기 위해서는 "기록 초기화" 클릭
 6. AI분석 OFF하면 "AI분석수동요청"클릭시 AI분석
 7. AI는 참고용이며 수익을 보장하지 않습니다. 
 """
@@ -401,10 +401,9 @@ async def button_callback(update: Update, context: CallbackContext) -> None:
             should_analyze = True
 
         elif action == 'toggle_auto_analysis':
-    current_state = data.get('auto_analysis_enabled', False)
-    new_state = not current_state
-    data['auto_analysis_enabled'] = new_state
-
+            current_state = data.get('auto_analysis_enabled', False)
+            new_state = not current_state
+            data['auto_analysis_enabled'] = new_state
     if new_state:  # ON
         if data.get('history'):
             should_analyze = True
@@ -501,4 +500,5 @@ def main() -> None:
 
 if __name__ == "__main__":
     main()
+
 
